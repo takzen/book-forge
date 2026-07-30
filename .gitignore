@@ -41,6 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # Local Book Forge content
+/data/*.db*
 /data/books/
 /data/exports/
 /data/uploads/

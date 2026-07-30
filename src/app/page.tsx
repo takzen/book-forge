@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const features = [
   {
     number: "01",
@@ -38,12 +40,12 @@ export default function Home() {
               placing illustrations, designing a cover, and exporting a beautiful PDF.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
-              <button className="rounded-full bg-[#1d241d] px-6 py-3 text-sm font-bold text-[#f6f1e8] transition-transform hover:-translate-y-0.5">
+              <Link href="/dashboard" className="rounded-full bg-[#1d241d] px-6 py-3 text-sm font-bold text-[#f6f1e8] transition-transform hover:-translate-y-0.5">
                 Create your first book
-              </button>
-              <button className="rounded-full border border-[#1d241d]/25 px-6 py-3 text-sm font-bold transition-colors hover:bg-[#e9e1d3]">
+              </Link>
+              <Link href="/dashboard" className="rounded-full border border-[#1d241d]/25 px-6 py-3 text-sm font-bold transition-colors hover:bg-[#e9e1d3]">
                 Open a project
-              </button>
+              </Link>
             </div>
           </div>
 

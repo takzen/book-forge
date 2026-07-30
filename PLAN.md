@@ -32,8 +32,8 @@ Nowa książka
 
 - [x] Next.js (App Router), TypeScript i pnpm.
 - [x] Tailwind CSS — szybki, czytelny interfejs.
-- [ ] SQLite + Drizzle ORM — lokalna baza dla książek, rozdziałów i ustawień.
-- [ ] Lokalny katalog `data/` — obrazy, okładki i gotowe PDF-y.
+- [x] SQLite + Drizzle ORM — lokalna baza dla książek, rozdziałów i ustawień.
+- [x] Lokalny katalog `data/` — baza jest tworzona lokalnie; obrazy, okładki i PDF-y dojdą w kolejnych etapach.
 - [ ] Edytor Markdown z podświetlaniem składni, skrótami i podglądem.
 - [ ] `react-markdown` / remark / rehype — bezpieczne renderowanie Markdowna.
 - [ ] Konva.js — płótno do projektowania okładki (tekst, obrazy, przesuwanie, skalowanie).
@@ -44,15 +44,16 @@ Nowa książka
 
 ### Projekty książek
 
-- [ ] Utworzyć książkę z tytułem, autorem i opisem.
-- [ ] Wybrać format: A5, A4 lub 6 × 9 cali.
-- [ ] Zobaczyć wszystkie książki na dashboardzie.
+- [x] Utworzyć książkę z tytułem i autorem.
+- [x] Wybrać format: A5, A4 lub 6 × 9 cali.
+- [x] Zobaczyć wszystkie książki na dashboardzie.
 - [ ] Zmienić nazwę lub usunąć projekt po potwierdzeniu.
 - [ ] Automatycznie zapisywać zmiany lokalnie.
 
 ### Struktura książki
 
-- [ ] Dodawać części, rozdziały i podrozdziały.
+- [ ] Dodawać części i podrozdziały.
+- [x] Dodawać rozdziały.
 - [ ] Zmieniać kolejność metodą przeciągnij i upuść.
 - [ ] Zmieniać tytuły oraz usuwać puste elementy.
 - [ ] Widzieć liczbę słów w rozdziale i całej książce.
@@ -60,7 +61,8 @@ Nowa książka
 
 ### Edytor Markdown
 
-- [ ] Edycja w wygodnym polu z numerami linii i kolorowaniem Markdowna.
+- [x] Edycja rozdziału w polu Markdown.
+- [ ] Numery linii i kolorowanie Markdowna.
 - [ ] Natychmiastowy podgląd sformatowanej treści obok edytora.
 - [ ] Pasek narzędzi dla nagłówków, pogrubienia, kursywy, cytatu, list i linków.
 - [ ] Skróty klawiszowe do najczęstszych formatowań.
@@ -105,16 +107,18 @@ Nowa książka
 - [x] Utworzyć projekt Next.js z pnpm.
 - [x] Skonfigurować TypeScript, Tailwind, linting i formatowanie kodu.
 - [x] Przygotować pierwszy układ aplikacji i stronę startową.
-- [ ] Dodać SQLite, migracje oraz lokalne katalogi danych.
+- [x] Dodać SQLite oraz lokalny katalog danych.
+- [ ] Dodać migracje Drizzle dla kolejnych zmian schematu.
 
 Efekt: aplikacja uruchamia się lokalnie i pokazuje pusty dashboard.
 
 ### 1. Książki i rozdziały
 
-- [ ] Dodać model książki, rozdziału i ustawień.
-- [ ] Zbudować formularz nowej książki.
-- [ ] Zbudować listę książek.
-- [ ] Zbudować panel drzewa rozdziałów.
+- [x] Dodać model książki i rozdziału.
+- [ ] Dodać model ustawień książki.
+- [x] Zbudować formularz nowej książki.
+- [x] Zbudować listę książek.
+- [x] Zbudować panel listy rozdziałów.
 - [ ] Dodać zmianę kolejności rozdziałów.
 - [ ] Dodać lokalny autosave.
 
