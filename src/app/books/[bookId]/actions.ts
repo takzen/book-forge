@@ -161,3 +161,23 @@ export async function deleteBookFromWorkspaceAction(bookId: string) {
   revalidatePath("/dashboard");
   redirect("/dashboard");
 }
+
+export async function saveCoverDesignAction({
+  bookId,
+  coverDesign,
+  coverImage,
+}: {
+  bookId: string;
+  coverDesign: string;
+  coverImage?: string;
+}) {
+  if (!bookId) {
+    return { success: false, error: "Invalid book ID" };
+  }
+
+  const { updateBookCover } = await import("@/lib/books");
+  updateBookCover({ id: bookId, coverDesign, coverImage });
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath(`/books/${bookId}/cover`);
+  return { success: true };
+}

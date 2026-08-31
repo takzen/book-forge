@@ -136,11 +136,12 @@ Efekt: można napisać kompletną książkę z ilustracjami i strukturą.
 
 ### 3. Projektant okładki
 
-- [ ] Zbudować płótno okładki.
-- [ ] Dodać tekst, tło i import obrazów.
-- [ ] Dodać operacje na elementach oraz warstwy.
-- [ ] Dodać zapis projektu okładki.
-- [ ] Dodać eksport PNG.
+- [x] Zbudować płótno okładki dopasowane do formatu książki (A5, 6x9 in, A4).
+- [x] Dodać gotowe szablony okładek (Classic Minimalist, Modern Emerald, Midnight Indigo, Terracotta Earth).
+- [x] Dodać tekst, tło (kolor, gradient, obraz) i import grafik/logo.
+- [x] Dodać operacje na elementach (przesuwanie drag & drop, edycja fontów, kolorów, rozmiarów).
+- [x] Dodać zapis projektu okładki w lokalnej bazie.
+- [x] Dodać eksport do wysokiej rozdzielczości PNG (300 DPI) z automatycznym przypisaniem do książki.
 
 Efekt: można samodzielnie stworzyć okładkę bez wychodzenia z aplikacji.
 
@@ -168,12 +169,12 @@ Efekt: książkę można pobrać jako poprawnie złożony PDF.
 - [x] Treść i grafiki nie opuszczają komputera.
 - [ ] Jeden widok podglądu jest źródłem prawdy dla PDF, dzięki czemu eksport nie zaskakuje innym układem.
 - [x] Każdy rozdział jest zapisywany automatycznie.
-- [ ] PDF w trybie druk zachowuje dobrą ostrość obrazów.
+- [x] PDF w trybie druk zachowuje dobrą ostrość obrazów (okładka generowana w 300 DPI).
 - [ ] Nie blokujemy pracy ciężkimi funkcjami: AI i EPUB zostają na później.
 
 ## Aktualny stan
 
 - [x] Ustalono cel i zakres lokalnego narzędzia.
 - [x] Ustalono Markdown, grafiki, projektant okładki i dwa profile PDF.
-- [x] Zrealizowano Etap 0, Etap 1 oraz kluczowe elementy Etapu 2 (edytor, pasek narzędzi, autosave, zarządzanie rozdziałami).
-- [ ] Następny krok: Etap 3 (Projektant okładki) lub Etap 4 (Podgląd i eksport PDF).
+- [x] Zrealizowano Etap 0, Etap 1, Etap 2 oraz Etap 3 (Projektant okładki).
+- [ ] Następny krok: Etap 4 (Podgląd całej książki i eksport do PDF).

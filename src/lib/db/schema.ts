@@ -7,6 +7,8 @@ export const books = sqliteTable("books", {
   description: text("description").notNull().default(""),
   format: text("format").notNull().default("a5"),
   status: text("status").notNull().default("draft"),
+  coverImage: text("cover_image").notNull().default(""),
+  coverDesign: text("cover_design").notNull().default(""),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

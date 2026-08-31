@@ -213,6 +213,22 @@ export function BookSidebar({
               {totalWords.toLocaleString()} total words
             </span>
           </div>
+
+          {/* Studio Navigation Tabs */}
+          <div className="mt-6 grid grid-cols-2 gap-1.5 rounded-2xl bg-[#e9e1d3] p-1 text-xs font-bold">
+            <Link
+              href={`/books/${bookId}`}
+              className="flex items-center justify-center gap-1 rounded-xl bg-[#fdfaf3] py-2 text-[#1d241d] shadow-xs transition hover:text-[#b15636]"
+            >
+              <span>📝</span> Manuscript
+            </Link>
+            <Link
+              href={`/books/${bookId}/cover`}
+              className="flex items-center justify-center gap-1 rounded-xl py-2 text-[#52604e] transition hover:bg-[#fdfaf3] hover:text-[#b15636]"
+            >
+              <span>🎨</span> Cover Studio
+            </Link>
+          </div>
         </div>
       )}
 

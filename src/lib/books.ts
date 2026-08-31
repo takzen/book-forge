@@ -90,6 +90,23 @@ export function updateBook({
     .run();
 }
 
+export function updateBookCover({
+  id,
+  coverDesign,
+  coverImage,
+}: {
+  id: string;
+  coverDesign?: string;
+  coverImage?: string;
+}) {
+  const now = Date.now();
+  const updates: Record<string, unknown> = { updatedAt: now };
+  if (coverDesign !== undefined) updates.coverDesign = coverDesign;
+  if (coverImage !== undefined) updates.coverImage = coverImage;
+
+  getDb().update(books).set(updates).where(eq(books.id, id)).run();
+}
+
 export async function deleteBook(bookId: string) {
   getDb().delete(books).where(eq(books.id, bookId)).run();
   await rm(join(process.cwd(), "data", "uploads", bookId), {

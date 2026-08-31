@@ -21,6 +21,8 @@ function createDatabase() {
       description TEXT NOT NULL DEFAULT '',
       format TEXT NOT NULL DEFAULT 'a5',
       status TEXT NOT NULL DEFAULT 'draft',
+      cover_image TEXT NOT NULL DEFAULT '',
+      cover_design TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -47,6 +49,18 @@ function createDatabase() {
       updated_at INTEGER NOT NULL
     );
   `);
+
+  // Safe runtime migration for existing databases
+  try {
+    sqlite.exec("ALTER TABLE books ADD COLUMN cover_image TEXT NOT NULL DEFAULT '';");
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec("ALTER TABLE books ADD COLUMN cover_design TEXT NOT NULL DEFAULT '';");
+  } catch {
+    // Column already exists
+  }
 
   return drizzle(sqlite, { schema });
 }
