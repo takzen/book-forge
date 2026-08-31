@@ -35,6 +35,17 @@ function createDatabase() {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS book_settings (
+      book_id TEXT PRIMARY KEY NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      font_family TEXT NOT NULL DEFAULT 'serif',
+      font_size_pt INTEGER NOT NULL DEFAULT 11,
+      line_height INTEGER NOT NULL DEFAULT 160,
+      margin_top_mm INTEGER NOT NULL DEFAULT 20,
+      margin_bottom_mm INTEGER NOT NULL DEFAULT 20,
+      margin_side_mm INTEGER NOT NULL DEFAULT 18,
+      chapter_start TEXT NOT NULL DEFAULT 'any',
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   return drizzle(sqlite, { schema });

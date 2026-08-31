@@ -115,22 +115,22 @@ Efekt: aplikacja uruchamia się lokalnie i pokazuje pusty dashboard.
 ### 1. Książki i rozdziały
 
 - [x] Dodać model książki i rozdziału.
-- [ ] Dodać model ustawień książki.
+- [x] Dodać model ustawień książki.
 - [x] Zbudować formularz nowej książki.
 - [x] Zbudować listę książek.
 - [x] Zbudować panel listy rozdziałów.
-- [ ] Dodać zmianę kolejności rozdziałów.
-- [ ] Dodać lokalny autosave.
+- [x] Dodać zmianę kolejności rozdziałów.
+- [x] Dodać lokalny autosave.
 
 Efekt: można utworzyć książkę, dodać rozdziały i po zamknięciu aplikacji nadal je mieć.
 
 ### 2. Pisanie w Markdownie
 
-- [ ] Dodać edytor Markdown i podgląd obok.
-- [ ] Dodać pasek formatowania i skróty.
-- [ ] Dodać liczenie słów.
-- [ ] Dodać wstawianie oraz renderowanie grafik.
-- [ ] Dodać generator spisu treści.
+- [x] Dodać edytor Markdown i podgląd obok.
+- [x] Dodać pasek formatowania i skróty.
+- [x] Dodać liczenie słów.
+- [x] Dodać wstawianie oraz renderowanie grafik.
+- [ ] Dodać generator spisz treści / widok całej książki.
 
 Efekt: można napisać kompletną książkę z ilustracjami i strukturą.
 
@@ -158,16 +158,16 @@ Efekt: książkę można pobrać jako poprawnie złożony PDF.
 
 - [ ] Dodać tworzenie kopii książki.
 - [ ] Dodać import i eksport projektu jako ZIP.
-- [ ] Dodać ochronę przed utratą niezapisanych zmian.
+- [x] Dodać ochronę przed utratą niezapisanych zmian.
 - [ ] Dodać testy: książka, rozdział, grafika, okładka i PDF.
 - [ ] Przetestować długi dokument oraz obrazy o dużej rozdzielczości.
 - [ ] Dopracować komunikaty błędów i pusty stan ekranów.
 
 ## Ważne założenia jakości
 
-- [ ] Treść i grafiki nie opuszczają komputera.
+- [x] Treść i grafiki nie opuszczają komputera.
 - [ ] Jeden widok podglądu jest źródłem prawdy dla PDF, dzięki czemu eksport nie zaskakuje innym układem.
-- [ ] Każdy rozdział jest zapisywany automatycznie.
+- [x] Każdy rozdział jest zapisywany automatycznie.
 - [ ] PDF w trybie druk zachowuje dobrą ostrość obrazów.
 - [ ] Nie blokujemy pracy ciężkimi funkcjami: AI i EPUB zostają na później.
 
@@ -175,4 +175,5 @@ Efekt: książkę można pobrać jako poprawnie złożony PDF.
 
 - [x] Ustalono cel i zakres lokalnego narzędzia.
 - [x] Ustalono Markdown, grafiki, projektant okładki i dwa profile PDF.
-- [x] Rozpoczęto implementację: etap 0.
+- [x] Zrealizowano Etap 0, Etap 1 oraz kluczowe elementy Etapu 2 (edytor, pasek narzędzi, autosave, zarządzanie rozdziałami).
+- [ ] Następny krok: Etap 3 (Projektant okładki) lub Etap 4 (Podgląd i eksport PDF).

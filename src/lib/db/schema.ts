@@ -24,3 +24,17 @@ export const chapters = sqliteTable("chapters", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const bookSettings = sqliteTable("book_settings", {
+  bookId: text("book_id")
+    .primaryKey()
+    .references(() => books.id, { onDelete: "cascade" }),
+  fontFamily: text("font_family").notNull().default("serif"),
+  fontSizePt: integer("font_size_pt").notNull().default(11),
+  lineHeight: integer("line_height").notNull().default(160),
+  marginTopMm: integer("margin_top_mm").notNull().default(20),
+  marginBottomMm: integer("margin_bottom_mm").notNull().default(20),
+  marginSideMm: integer("margin_side_mm").notNull().default(18),
+  chapterStart: text("chapter_start").notNull().default("any"),
+  updatedAt: integer("updated_at").notNull(),
+});

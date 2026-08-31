@@ -28,3 +28,35 @@ button {
   cursor: pointer;
   font: inherit;
 }
+
+.markdown-preview {
+  color: #2a332a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.05rem;
+  line-height: 1.85;
+}
+
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  color: #1d241d;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.markdown-preview h1 { font-size: 2.2rem; margin: 0 0 1.3rem; }
+.markdown-preview h2 { font-size: 1.7rem; margin: 2.1rem 0 1rem; }
+.markdown-preview h3 { font-size: 1.3rem; margin: 1.7rem 0 0.8rem; }
+.markdown-preview p { margin: 0 0 1.2rem; }
+.markdown-preview ul, .markdown-preview ol { margin: 0 0 1.2rem; padding-left: 1.5rem; }
+.markdown-preview blockquote { margin: 1.5rem 0; border-left: 3px solid #d99d67; padding-left: 1rem; color: #52604e; }
+.markdown-preview code { border-radius: 0.25rem; background: #e9e1d3; padding: 0.1rem 0.3rem; font-family: ui-monospace, monospace; font-size: 0.8em; }
+.markdown-preview pre { overflow-x: auto; border-radius: 0.75rem; background: #1d241d; padding: 1rem; color: #f8f1dd; }
+.markdown-preview pre code { background: transparent; padding: 0; }
+.markdown-preview img { display: block; width: 100%; height: auto; margin: 1.8rem 0; border-radius: 0.75rem; }
+.markdown-preview a { color: #b15636; text-decoration: underline; text-underline-offset: 0.18em; }

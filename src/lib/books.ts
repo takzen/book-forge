@@ -1,12 +1,26 @@
 import { randomUUID } from "node:crypto";
-import { asc, desc, eq } from "drizzle-orm";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { books, chapters } from "@/lib/db/schema";
+import { bookSettings, books, chapters } from "@/lib/db/schema";
 
 export type NewBookInput = {
   title: string;
   author?: string;
   format?: "a5" | "a4" | "six-by-nine";
+};
+
+export type BookFormat = "a5" | "a4" | "six-by-nine";
+
+export type BookSettingsInput = {
+  fontFamily?: string;
+  fontSizePt?: number;
+  lineHeight?: number;
+  marginTopMm?: number;
+  marginBottomMm?: number;
+  marginSideMm?: number;
+  chapterStart?: "any" | "recto" | "verso";
 };
 
 export function listBooks() {
@@ -26,7 +40,11 @@ export function listChapters(bookId: string) {
     .all();
 }
 
-export function createBook({ title, author = "", format = "a5" }: NewBookInput) {
+export function createBook({
+  title,
+  author = "",
+  format = "a5",
+}: NewBookInput) {
   const id = randomUUID();
   const chapterId = randomUUID();
   const now = Date.now();
@@ -36,6 +54,7 @@ export function createBook({ title, author = "", format = "a5" }: NewBookInput) 
     tx.insert(books)
       .values({ id, title, author, format, createdAt: now, updatedAt: now })
       .run();
+    tx.insert(bookSettings).values({ bookId: id, updatedAt: now }).run();
     tx.insert(chapters)
       .values({
         id: chapterId,
@@ -50,6 +69,88 @@ export function createBook({ title, author = "", format = "a5" }: NewBookInput) 
   });
 
   return id;
+}
+
+export function updateBook({
+  id,
+  title,
+  author,
+  format,
+}: {
+  id: string;
+  title: string;
+  author: string;
+  format: BookFormat;
+}) {
+  const now = Date.now();
+  getDb()
+    .update(books)
+    .set({ title, author, format, updatedAt: now })
+    .where(eq(books.id, id))
+    .run();
+}
+
+export async function deleteBook(bookId: string) {
+  getDb().delete(books).where(eq(books.id, bookId)).run();
+  await rm(join(process.cwd(), "data", "uploads", bookId), {
+    recursive: true,
+    force: true,
+  });
+}
+
+export function getBookSettings(bookId: string) {
+  const db = getDb();
+  const existing = db
+    .select()
+    .from(bookSettings)
+    .where(eq(bookSettings.bookId, bookId))
+    .get();
+
+  if (existing) {
+    return existing;
+  }
+
+  const now = Date.now();
+  db.insert(bookSettings).values({ bookId, updatedAt: now }).run();
+  return db
+    .select()
+    .from(bookSettings)
+    .where(eq(bookSettings.bookId, bookId))
+    .get()!;
+}
+
+export function updateBookSettings(bookId: string, input: BookSettingsInput) {
+  const now = Date.now();
+  getDb()
+    .update(bookSettings)
+    .set({ ...input, updatedAt: now })
+    .where(eq(bookSettings.bookId, bookId))
+    .run();
+}
+
+export function deleteChapter(bookId: string, chapterId: string) {
+  const now = Date.now();
+  const db = getDb();
+
+  db.transaction((tx) => {
+    tx.delete(chapters).where(eq(chapters.id, chapterId)).run();
+    tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
+  });
+}
+
+export function reorderChapters(bookId: string, orderedChapterIds: string[]) {
+  const db = getDb();
+  const now = Date.now();
+
+  db.transaction((tx) => {
+    orderedChapterIds.forEach((chapterId, index) => {
+      tx.update(chapters)
+        .set({ sortOrder: index, updatedAt: now })
+        .where(and(eq(chapters.id, chapterId), eq(chapters.bookId, bookId)))
+        .run();
+    });
+    tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
+  });
 }
 
 export function createChapter(bookId: string) {
