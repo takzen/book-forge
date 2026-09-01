@@ -181,3 +181,14 @@ export async function saveCoverDesignAction({
   revalidatePath(`/books/${bookId}/cover`);
   return { success: true };
 }
+
+export async function duplicateBookFromWorkspaceAction(bookId: string) {
+  if (!bookId) {
+    redirect("/dashboard");
+  }
+
+  const { duplicateBook } = await import("@/lib/books");
+  const newId = await duplicateBook(bookId);
+  revalidatePath("/dashboard");
+  redirect(`/books/${newId}`);
+}

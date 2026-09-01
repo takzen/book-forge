@@ -9,6 +9,7 @@ import {
   reorderChaptersAction,
   updateBookDetailsAction,
   deleteBookFromWorkspaceAction,
+  duplicateBookFromWorkspaceAction,
 } from "@/app/books/[bookId]/actions";
 
 type ChapterItem = {
@@ -94,6 +95,12 @@ export function BookSidebar({
     });
   }
 
+  async function handleDuplicateBook() {
+    startTransition(async () => {
+      await duplicateBookFromWorkspaceAction(bookId);
+    });
+  }
+
   async function handleDeleteBook() {
     if (
       !confirm(
@@ -175,7 +182,26 @@ export function BookSidebar({
             </select>
           </label>
 
-          <div className="mt-4 flex items-center justify-between gap-2">
+          {/* Quick Actions (Duplicate, Export ZIP) */}
+          <div className="mt-3 flex gap-2 border-t border-[#1d241d]/10 pt-3">
+            <button
+              type="button"
+              onClick={handleDuplicateBook}
+              disabled={isPending}
+              className="flex-1 rounded-lg border border-[#1d241d]/15 bg-white py-1.5 text-center font-medium text-[#52604e] transition hover:bg-[#e9e1d3] hover:text-[#1d241d]"
+            >
+              📋 Duplicate
+            </button>
+            <a
+              href={`/api/books/${bookId}/export`}
+              download
+              className="flex-1 rounded-lg border border-[#1d241d]/15 bg-white py-1.5 text-center font-medium text-[#52604e] transition hover:bg-[#e9e1d3] hover:text-[#1d241d]"
+            >
+              📦 Export ZIP
+            </a>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#1d241d]/10 pt-3">
             <button
               type="button"
               onClick={handleDeleteBook}
@@ -215,18 +241,24 @@ export function BookSidebar({
           </div>
 
           {/* Studio Navigation Tabs */}
-          <div className="mt-6 grid grid-cols-2 gap-1.5 rounded-2xl bg-[#e9e1d3] p-1 text-xs font-bold">
+          <div className="mt-5 grid grid-cols-3 gap-1 rounded-2xl bg-[#e9e1d3] p-1 text-[0.7rem] font-bold">
             <Link
               href={`/books/${bookId}`}
-              className="flex items-center justify-center gap-1 rounded-xl bg-[#fdfaf3] py-2 text-[#1d241d] shadow-xs transition hover:text-[#b15636]"
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-[#fdfaf3] py-2 text-[#1d241d] shadow-xs transition hover:text-[#b15636]"
             >
               <span>📝</span> Manuscript
             </Link>
             <Link
               href={`/books/${bookId}/cover`}
-              className="flex items-center justify-center gap-1 rounded-xl py-2 text-[#52604e] transition hover:bg-[#fdfaf3] hover:text-[#b15636]"
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[#52604e] transition hover:bg-[#fdfaf3] hover:text-[#b15636]"
             >
-              <span>🎨</span> Cover Studio
+              <span>🎨</span> Cover
+            </Link>
+            <Link
+              href={`/books/${bookId}/preview`}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[#52604e] transition hover:bg-[#fdfaf3] hover:text-[#b15636]"
+            >
+              <span>📖</span> Preview & PDF
             </Link>
           </div>
         </div>
