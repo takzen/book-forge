@@ -112,7 +112,12 @@ New Book ➔ Add Chapters & Outline ➔ Write in Markdown ➔ Add Local Images �
    pnpm exec playwright install chromium
    ```
 
-4. **Start Book Forge as a Desktop App (Electron):**
+4. **(Optional) Create a Desktop Shortcut (Windows):**
+   ```bash
+   pnpm shortcut
+   ```
+
+5. **Start Book Forge as a Desktop App (Electron):**
    ```bash
    pnpm electron:dev
    ```
@@ -129,6 +134,7 @@ New Book ➔ Add Chapters & Outline ➔ Write in Markdown ➔ Add Local Images �
 - `pnpm electron:dev` — Start the application in an Electron desktop window with hot reload.
 - `pnpm electron:start` — Run the production build in an Electron window.
 - `pnpm electron` — Open the Electron wrapper directly.
+- `pnpm shortcut` — Create a native Windows Desktop shortcut with icon for Book Forge.
 - `pnpm dev` — Start the Next.js development server (browser mode).
 - `pnpm build` — Build the optimized production application.
 - `pnpm start` — Start the production server.

@@ -13,7 +13,8 @@
     "db:push": "drizzle-kit push",
     "electron": "electron .",
     "electron:dev": "concurrently -k -n \"NEXT,ELECTRON\" -c \"cyan,magenta\" \"next dev\" \"wait-on http://127.0.0.1:3000 && electron .\"",
-    "electron:start": "cross-env NODE_ENV=production concurrently -k -n \"NEXT,ELECTRON\" -c \"green,blue\" \"next start\" \"wait-on http://127.0.0.1:3000 && electron .\""
+    "electron:start": "cross-env NODE_ENV=production concurrently -k -n \"NEXT,ELECTRON\" -c \"green,blue\" \"next start\" \"wait-on http://127.0.0.1:3000 && electron .\"",
+    "shortcut": "node scripts/create-desktop-shortcut.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",
