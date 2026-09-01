@@ -299,7 +299,10 @@ export function CoverDesigner({
   const [design, setDesign] = useState<CoverDesignState>(() => {
     if (initialDesign) {
       try {
-        return JSON.parse(initialDesign);
+        const parsed = JSON.parse(initialDesign);
+        if (parsed && Array.isArray(parsed.elements)) {
+          return parsed;
+        }
       } catch {
         // Fallback
       }
@@ -307,12 +310,23 @@ export function CoverDesigner({
     return DEFAULT_TEMPLATES[0].build(bookTitle, bookAuthor);
   });
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Default to selecting the first element so properties panel is immediately active
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      if (initialDesign) {
+        const parsed = JSON.parse(initialDesign);
+        if (parsed?.elements?.[0]?.id) return parsed.elements[0].id;
+      }
+    } catch {}
+    return "title-1";
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [currentCoverUrl, setCurrentCoverUrl] = useState(initialCoverImage || "");
   const [isExporting, setIsExporting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [snapGuides, setSnapGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [isDragging, setIsDragging] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -321,7 +335,15 @@ export function CoverDesigner({
     startY: number;
     elemStartX: number;
     elemStartY: number;
+    elemWidth: number;
+    elemHeight: number;
   } | null>(null);
+  const pendingDragRef = useRef<{
+    x: number;
+    y: number;
+    guides: { x: number[]; y: number[] };
+  } | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
 
   // Aspect ratios based on book format
   const aspectRatios: Record<string, string> = {
@@ -356,13 +378,109 @@ export function CoverDesigner({
     [bookId, design, currentCoverUrl]
   );
 
-  // Dragging logic
-  function handleMouseDown(e: React.MouseEvent, elementId: string) {
+  // Global mousemove and mouseup listeners for bulletproof dragging
+  useEffect(() => {
+    if (!isDragging) return;
+
+    function commitPendingDrag() {
+      const pendingDrag = pendingDragRef.current;
+      const activeDrag = dragRef.current;
+      if (!pendingDrag || !activeDrag) return;
+
+      pendingDragRef.current = null;
+      setSnapGuides(pendingDrag.guides);
+      setDesign((prev) => ({
+        ...prev,
+        elements: prev.elements.map((el) =>
+          el.id === activeDrag.elementId ? { ...el, x: pendingDrag.x, y: pendingDrag.y } : el
+        ),
+      }));
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!dragRef.current || !canvasRef.current) return;
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const deltaXPercent = ((e.clientX - dragRef.current.startX) / rect.width) * 100;
+      const deltaYPercent = ((e.clientY - dragRef.current.startY) / rect.height) * 100;
+
+      const elWidth = dragRef.current.elemWidth;
+      let newX = dragRef.current.elemStartX + deltaXPercent;
+      let newY = dragRef.current.elemStartY + deltaYPercent;
+
+      // Clamp to canvas bounds
+      newX = Math.max(0, Math.min(100 - elWidth, newX));
+      newY = Math.max(0, Math.min(95, newY));
+
+      // Snapping threshold
+      const SNAP_THRESHOLD = 0.8;
+      const activeGuidesX: number[] = [];
+      const activeGuidesY: number[] = [];
+
+      // Center snap target
+      const centerSnapX = 50 - elWidth / 2;
+      if (Math.abs(newX - centerSnapX) <= SNAP_THRESHOLD) {
+        newX = centerSnapX;
+        activeGuidesX.push(50);
+      }
+
+      // Vertical center snap target. y is the top edge, so account for the
+      // element's actual height rather than snapping its top edge to 50%.
+      const centerSnapY = 50 - dragRef.current.elemHeight / 2;
+      if (Math.abs(newY - centerSnapY) <= SNAP_THRESHOLD) {
+        newY = centerSnapY;
+        activeGuidesY.push(50);
+      }
+
+      pendingDragRef.current = {
+        x: Math.round(newX * 10) / 10,
+        y: Math.round(newY * 10) / 10,
+        guides: { x: activeGuidesX, y: activeGuidesY },
+      };
+
+      if (dragFrameRef.current === null) {
+        dragFrameRef.current = window.requestAnimationFrame(() => {
+          dragFrameRef.current = null;
+          commitPendingDrag();
+        });
+      }
+    }
+
+    function onMouseUp() {
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      commitPendingDrag();
+      dragRef.current = null;
+      setIsDragging(false);
+      setSnapGuides({ x: [], y: [] });
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    };
+  }, [isDragging]);
+
+  // Dragging start logic
+  function handleElementMouseDown(e: React.MouseEvent, elementId: string) {
+    e.preventDefault();
     e.stopPropagation();
     setSelectedId(elementId);
 
     const elem = design.elements.find((el) => el.id === elementId);
     if (!elem || !canvasRef.current) return;
+
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const elementRect = e.currentTarget.getBoundingClientRect();
 
     dragRef.current = {
       elementId,
@@ -370,31 +488,10 @@ export function CoverDesigner({
       startY: e.clientY,
       elemStartX: elem.x,
       elemStartY: elem.y,
+      elemWidth: elem.width,
+      elemHeight: (elementRect.height / canvasRect.height) * 100,
     };
-  }
-
-  function handleMouseMove(e: React.MouseEvent) {
-    if (!dragRef.current || !canvasRef.current) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const deltaXPercent = ((e.clientX - dragRef.current.startX) / rect.width) * 100;
-    const deltaYPercent = ((e.clientY - dragRef.current.startY) / rect.height) * 100;
-
-    const newX = Math.max(0, Math.min(100 - (selectedElement?.width ?? 20), dragRef.current.elemStartX + deltaXPercent));
-    const newY = Math.max(0, Math.min(95, dragRef.current.elemStartY + deltaYPercent));
-
-    setDesign((prev) => ({
-      ...prev,
-      elements: prev.elements.map((el) =>
-        el.id === dragRef.current?.elementId
-          ? { ...el, x: Math.round(newX * 10) / 10, y: Math.round(newY * 10) / 10 }
-          : el
-      ),
-    }));
-  }
-
-  function handleMouseUp() {
-    dragRef.current = null;
+    setIsDragging(true);
   }
 
   // Update selected element property
@@ -404,6 +501,66 @@ export function CoverDesigner({
       ...prev,
       elements: prev.elements.map((el) => (el.id === selectedId ? { ...el, ...updates } : el)),
     }));
+  }
+
+  // Quick alignment helpers
+  function centerHorizontally() {
+    if (!selectedElement) return;
+    const newX = Math.round(((100 - selectedElement.width) / 2) * 10) / 10;
+    updateSelected({
+      x: newX,
+      textAlign: selectedElement.type === "text" ? "center" : selectedElement.textAlign,
+    });
+  }
+
+  function centerVertically() {
+    if (!selectedElement) return;
+    updateSelected({ y: 45 });
+  }
+
+  function alignLeft() {
+    if (!selectedElement) return;
+    updateSelected({
+      x: 10,
+      textAlign: selectedElement.type === "text" ? "left" : selectedElement.textAlign,
+    });
+  }
+
+  function alignRight() {
+    if (!selectedElement) return;
+    updateSelected({
+      x: Math.max(0, 90 - selectedElement.width),
+      textAlign: selectedElement.type === "text" ? "right" : selectedElement.textAlign,
+    });
+  }
+
+  function duplicateSelected() {
+    if (!selectedElement) return;
+    const newId = `elem-${Date.now()}`;
+    const maxZ = Math.max(...design.elements.map((e) => e.zIndex), 0);
+    const duplicated: CoverElement = {
+      ...selectedElement,
+      id: newId,
+      y: Math.min(90, selectedElement.y + 5),
+      zIndex: maxZ + 1,
+    };
+    setDesign((prev) => ({
+      ...prev,
+      elements: [...prev.elements, duplicated],
+    }));
+    setSelectedId(newId);
+  }
+
+  function bringForward() {
+    if (!selectedElement) return;
+    const maxZ = Math.max(...design.elements.map((e) => e.zIndex), 0);
+    updateSelected({ zIndex: maxZ + 1 });
+  }
+
+  function sendBackward() {
+    if (!selectedElement) return;
+    const minZ = Math.min(...design.elements.map((e) => e.zIndex), 0);
+    updateSelected({ zIndex: Math.max(0, minZ - 1) });
   }
 
   // Add new element
@@ -451,9 +608,8 @@ export function CoverDesigner({
     setIsExporting(true);
 
     try {
-      // Create offscreen canvas with print resolution (e.g. 1600 x 2400)
       const width = 1600;
-      const height = bookFormat === "six-by-nine" ? 2400 : 2262; // A5 aspect is 1:1.414, 6x9 is 1:1.5
+      const height = bookFormat === "six-by-nine" ? 2400 : 2262;
 
       const canvas = document.createElement("canvas");
       canvas.width = width;
@@ -512,7 +668,7 @@ export function CoverDesigner({
 
         if (el.type === "text" && el.content) {
           const fontPt = el.fontSize || 20;
-          const fontPx = fontPt * 3.8; // scale up for high-res
+          const fontPx = fontPt * 3.8;
           const family =
             el.fontFamily === "serif"
               ? "Georgia, serif"
@@ -531,7 +687,6 @@ export function CoverDesigner({
           if (el.textTransform === "uppercase") textToDraw = textToDraw.toUpperCase();
           if (el.textTransform === "lowercase") textToDraw = textToDraw.toLowerCase();
 
-          // Calculate text position based on alignment
           let drawX = elX;
           if (el.textAlign === "center") {
             ctx.textAlign = "center";
@@ -544,7 +699,6 @@ export function CoverDesigner({
             drawX = elX;
           }
 
-          // Draw background pill if present
           if (el.backgroundColor) {
             const metrics = ctx.measureText(textToDraw);
             const padding = 24;
@@ -563,7 +717,7 @@ export function CoverDesigner({
           img.crossOrigin = "anonymous";
           await new Promise((resolve) => {
             img.onload = resolve;
-            img.onerror = resolve; // don't crash
+            img.onerror = resolve;
             img.src = el.content!;
           });
           const imgH = elWidth * (img.height / (img.width || 1));
@@ -571,11 +725,9 @@ export function CoverDesigner({
         }
       }
 
-      // Convert canvas to Blob
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 1.0));
       if (!blob) throw new Error("Could not create PNG blob");
 
-      // Upload to project uploads
       const formData = new FormData();
       formData.append("bookId", bookId);
       formData.append("image", new File([blob], "cover.png", { type: "image/png" }));
@@ -587,7 +739,6 @@ export function CoverDesigner({
         setCurrentCoverUrl(data.url);
         await saveDesign(data.url);
 
-        // Also trigger browser download for the user
         const a = document.createElement("a");
         a.href = data.url;
         a.download = `${bookTitle.toLowerCase().replace(/\s+/g, "-")}-cover.png`;
@@ -666,7 +817,7 @@ export function CoverDesigner({
         </div>
 
         <div className="flex items-center gap-3">
-          {savedSuccess && <span className="text-xs font-bold text-[#3e5934]">✓ Cover saved locally</span>}
+          {savedSuccess && <span className="text-xs font-bold text-[#3e5934]">✓ Cover saved</span>}
 
           <button
             type="button"
@@ -704,55 +855,93 @@ export function CoverDesigner({
       </header>
 
       {/* Main Studio Area */}
-      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[20rem_1fr_22rem]">
-        {/* Left Sidebar: Presets & Tools */}
-        <aside className="border-b border-[#1d241d]/15 bg-[#f6f1e8] p-6 lg:border-r lg:border-b-0">
-          <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Cover Templates</p>
-          <div className="mt-3 space-y-2.5">
-            {DEFAULT_TEMPLATES.map((tmpl) => (
-              <button
-                key={tmpl.name}
-                type="button"
-                onClick={() => {
-                  if (confirm(`Load "${tmpl.name}" template? This will replace current cover elements.`)) {
-                    setDesign(tmpl.build(bookTitle, bookAuthor));
-                    setSelectedId(null);
-                  }
-                }}
-                className="w-full rounded-2xl border border-[#1d241d]/10 bg-[#fdfaf3] p-3 text-left transition hover:border-[#b15636] hover:shadow-sm"
-              >
-                <p className="font-serif text-sm font-bold text-[#1d241d]">{tmpl.name}</p>
-                <p className="mt-1 text-xs text-[#66705f]">{tmpl.description}</p>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-8 border-t border-[#1d241d]/15 pt-6">
+      <div className="grid flex-1 grid-cols-[18rem_1fr_20rem] xl:grid-cols-[20rem_1fr_22rem] min-h-0">
+        {/* Left Sidebar: Presets, Add Tools, & Layers */}
+        <aside className="border-r border-[#1d241d]/15 bg-[#f6f1e8] p-5 overflow-y-auto max-h-[calc(100vh-4.5rem)]">
+          {/* Add Elements */}
+          <div>
             <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Add Elements</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => addElement("text")}
-                className="rounded-xl border border-[#1d241d]/15 bg-[#fdfaf3] p-2.5 text-xs font-semibold text-[#1d241d] transition hover:border-[#b15636]"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-[#1d241d]/15 bg-[#fdfaf3] p-2.5 text-xs font-semibold text-[#1d241d] transition hover:border-[#b15636]"
               >
-                + Add Text
+                <span>+</span> Add Text
               </button>
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-[#1d241d]/15 bg-[#fdfaf3] p-2.5 text-xs font-semibold text-[#1d241d] transition hover:border-[#b15636]">
+              <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[#1d241d]/15 bg-[#fdfaf3] p-2.5 text-xs font-semibold text-[#1d241d] transition hover:border-[#b15636]">
                 <input
                   type="file"
                   accept="image/*"
                   className="sr-only"
                   onChange={(e) => handleImageUpload(e, "element")}
                 />
-                {uploadingImage ? "Uploading…" : "+ Add Image"}
+                <span>🖼 {uploadingImage ? "Uploading…" : "+ Image"}</span>
               </label>
             </div>
           </div>
 
+          {/* Layers List */}
+          <div className="mt-6 border-t border-[#1d241d]/15 pt-5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Cover Elements ({design.elements.length})</p>
+              {selectedId && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="text-[0.65rem] font-bold text-[#b15636] hover:underline"
+                >
+                  Deselect
+                </button>
+              )}
+            </div>
+
+            <div className="mt-2.5 space-y-1.5">
+              {design.elements.length === 0 ? (
+                <p className="text-xs italic text-[#66705f]">No elements on cover</p>
+              ) : (
+                design.elements.map((el, idx) => {
+                  const isSelected = el.id === selectedId;
+                  return (
+                    <div
+                      key={el.id}
+                      onClick={() => setSelectedId(el.id)}
+                      className={`group flex items-center justify-between rounded-xl px-3 py-2 text-xs transition cursor-pointer ${
+                        isSelected
+                          ? "bg-[#284c42] font-semibold text-[#f8f1dd] shadow-sm"
+                          : "bg-[#fdfaf3] text-[#1d241d] hover:border-[#b15636] border border-[#1d241d]/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span>{el.type === "image" ? "🖼" : "🔤"}</span>
+                        <span className="truncate">
+                          {el.content || (el.type === "image" ? "Image" : "Empty text")}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteElement(el.id);
+                        }}
+                        title="Delete element"
+                        className={`ml-2 rounded p-1 opacity-0 group-hover:opacity-100 transition ${
+                          isSelected ? "hover:bg-white/20 text-white" : "hover:bg-red-100 text-red-600"
+                        }`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
           {/* Background Settings */}
-          <div className="mt-8 border-t border-[#1d241d]/15 pt-6">
+          <div className="mt-6 border-t border-[#1d241d]/15 pt-5">
             <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Background</p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-2.5 space-y-3">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -819,18 +1008,41 @@ export function CoverDesigner({
               )}
             </div>
           </div>
+
+          {/* Cover Templates */}
+          <div className="mt-6 border-t border-[#1d241d]/15 pt-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Cover Templates</p>
+            <div className="mt-2.5 space-y-2">
+              {DEFAULT_TEMPLATES.map((tmpl) => (
+                <button
+                  key={tmpl.name}
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Load "${tmpl.name}" template? This will replace current cover elements.`)) {
+                      setDesign(tmpl.build(bookTitle, bookAuthor));
+                      setSelectedId(null);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-[#1d241d]/10 bg-[#fdfaf3] p-2.5 text-left transition hover:border-[#b15636] hover:shadow-sm"
+                >
+                  <p className="font-serif text-xs font-bold text-[#1d241d]">{tmpl.name}</p>
+                  <p className="mt-0.5 text-[0.7rem] text-[#66705f] line-clamp-1">{tmpl.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
         </aside>
 
         {/* Center: Canvas Viewport */}
         <main
-          className="flex min-h-[70vh] items-center justify-center p-6 sm:p-10"
-          onClick={() => setSelectedId(null)}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          className="flex min-h-[70vh] items-center justify-center p-6 sm:p-10 select-none overflow-hidden"
         >
-          {/* Canvas Box */}
-          <div
-            ref={canvasRef}
+            {/* Canvas Box */}
+            <div
+              ref={canvasRef}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setSelectedId(null);
+              }}
             style={{
               backgroundColor: design.backgroundType === "color" ? design.backgroundColor : undefined,
               backgroundImage:
@@ -842,7 +1054,7 @@ export function CoverDesigner({
               backgroundSize: "cover",
               backgroundPosition: "center",
             }}
-            className={`relative w-full max-w-[420px] ${canvasAspect} select-none overflow-hidden rounded-xl shadow-2xl transition-all duration-150`}
+            className={`relative w-full max-w-[420px] ${canvasAspect} overflow-hidden rounded-xl shadow-2xl transition-all duration-150`}
           >
             {/* Outer Border Frame */}
             {design.hasBorder && (
@@ -854,6 +1066,31 @@ export function CoverDesigner({
                 }}
                 className="pointer-events-none absolute border"
               />
+            )}
+
+            {/* Snap Guide Lines */}
+            {snapGuides.x.map((pos) => (
+              <div
+                key={`snap-x-${pos}`}
+                style={{ left: `${pos}%` }}
+                className="pointer-events-none absolute top-0 bottom-0 w-px border-l-2 border-dashed border-cyan-400 z-[999] opacity-90 shadow-sm"
+              />
+            ))}
+            {snapGuides.y.map((pos) => (
+              <div
+                key={`snap-y-${pos}`}
+                style={{ top: `${pos}%` }}
+                className="pointer-events-none absolute left-0 right-0 h-px border-t-2 border-dashed border-fuchsia-400 z-[999] opacity-90 shadow-sm"
+              />
+            ))}
+            {isDragging && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1d241d]/90 px-3 py-1.5 text-[0.65rem] font-bold tracking-[0.12em] text-white shadow-lg">
+                {snapGuides.x.length > 0 && snapGuides.y.length > 0
+                  ? "CENTERED"
+                  : snapGuides.x.length > 0
+                  ? "CENTERED HORIZONTALLY"
+                  : "CENTERED VERTICALLY"}
+              </div>
             )}
 
             {/* Elements */}
@@ -869,17 +1106,26 @@ export function CoverDesigner({
               return (
                 <div
                   key={el.id}
-                  onMouseDown={(e) => handleMouseDown(e, el.id)}
+                  onMouseDown={(e) => handleElementMouseDown(e, el.id)}
                   style={{
                     left: `${el.x}%`,
                     top: `${el.y}%`,
                     width: `${el.width}%`,
                     zIndex: el.zIndex,
                   }}
-                  className={`absolute cursor-move transition-shadow ${
-                    isSelected ? "ring-2 ring-[#b15636] ring-offset-2" : "hover:outline hover:outline-1 hover:outline-[#b15636]/50"
+                  className={`absolute cursor-move group ${isDragging ? "transition-none" : "transition-shadow duration-150"} ${
+                    isSelected
+                      ? "ring-2 ring-[#b15636] ring-offset-2 shadow-lg"
+                      : "hover:outline hover:outline-2 hover:outline-[#b15636]/60"
                   }`}
                 >
+                  {/* Selected Indicator Badges */}
+                  {isSelected && (
+                    <div className="absolute -top-5 left-0 flex items-center gap-1 rounded bg-[#b15636] px-1.5 py-0.5 text-[0.6rem] font-bold text-white shadow-xs">
+                      <span>{Math.round(el.x)}%, {Math.round(el.y)}%</span>
+                    </div>
+                  )}
+
                   {el.type === "text" && (
                     <p
                       style={{
@@ -894,7 +1140,7 @@ export function CoverDesigner({
                         borderRadius: `${el.borderRadius || 0}px`,
                         padding: el.backgroundColor ? "4px 12px" : "0",
                       }}
-                      className={`${familyClass} leading-tight break-words`}
+                      className={`${familyClass} leading-tight break-words select-none`}
                     >
                       {el.content || "Empty Text"}
                     </p>
@@ -905,7 +1151,7 @@ export function CoverDesigner({
                     <img
                       src={el.content}
                       alt="Cover element"
-                      className="pointer-events-none w-full rounded object-contain"
+                      className="pointer-events-none w-full rounded object-contain select-none"
                     />
                   )}
                 </div>
@@ -914,12 +1160,51 @@ export function CoverDesigner({
           </div>
         </main>
 
-        {/* Right Sidebar: Inspector */}
-        <aside className="border-t border-[#1d241d]/15 bg-[#f6f1e8] p-6 lg:border-t-0 lg:border-l">
+        {/* Right Sidebar: Element Properties Inspector */}
+        <aside className="border-t border-[#1d241d]/15 bg-[#f6f1e8] p-5 lg:border-t-0 lg:border-l overflow-y-auto max-h-[calc(100vh-4.5rem)]">
           <p className="text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">Element Properties</p>
 
           {selectedElement ? (
             <div className="mt-4 space-y-4 text-xs">
+              {/* Quick Alignment Actions */}
+              <div className="rounded-xl border border-[#1d241d]/10 bg-[#fdfaf3] p-3">
+                <p className="font-bold text-[#1d241d] mb-2">🎯 Alignment & Center</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={centerHorizontally}
+                    title="Center element horizontally on cover (X = center)"
+                    className="flex items-center justify-center gap-1 rounded-lg bg-[#284c42] py-2 px-2 font-bold text-[#f8f1dd] hover:bg-[#1d241d] transition"
+                  >
+                    <span>↔ Center X</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={centerVertically}
+                    title="Center element vertically on cover (Y = center)"
+                    className="flex items-center justify-center gap-1 rounded-lg bg-[#284c42] py-2 px-2 font-bold text-[#f8f1dd] hover:bg-[#1d241d] transition"
+                  >
+                    <span>↕ Center Y</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={alignLeft}
+                    className="rounded-lg border border-[#1d241d]/15 bg-white py-1.5 font-medium text-[#52604e] hover:bg-[#e9e1d3]"
+                  >
+                    ← Align Left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={alignRight}
+                    className="rounded-lg border border-[#1d241d]/15 bg-white py-1.5 font-medium text-[#52604e] hover:bg-[#e9e1d3]"
+                  >
+                    Align Right →
+                  </button>
+                </div>
+              </div>
+
               {/* Text content */}
               {selectedElement.type === "text" && (
                 <div>
@@ -928,7 +1213,7 @@ export function CoverDesigner({
                     value={selectedElement.content || ""}
                     onChange={(e) => updateSelected({ content: e.target.value })}
                     rows={2}
-                    className="mt-1 w-full rounded-xl border border-[#1d241d]/20 bg-[#fdfaf3] p-2 text-xs outline-none focus:border-[#b15636]"
+                    className="mt-1 w-full rounded-xl border border-[#1d241d]/20 bg-[#fdfaf3] p-2.5 text-xs outline-none focus:border-[#b15636]"
                   />
                 </div>
               )}
@@ -949,121 +1234,201 @@ export function CoverDesigner({
                 </div>
               )}
 
-              {/* Size & Weight */}
-              {selectedElement.type === "text" && (
-                <div className="grid grid-cols-2 gap-2">
+              {/* Size & Width */}
+              <div className="grid grid-cols-2 gap-2">
+                {selectedElement.type === "text" && (
                   <div>
-                    <label className="font-semibold text-[#1d241d]">Font Size ({selectedElement.fontSize}px)</label>
+                    <label className="font-semibold text-[#1d241d]">Font Size ({selectedElement.fontSize || 20}px)</label>
                     <input
                       type="range"
                       min={10}
-                      max={64}
+                      max={72}
                       value={selectedElement.fontSize || 20}
                       onChange={(e) => updateSelected({ fontSize: Number(e.target.value) })}
                       className="mt-2 w-full accent-[#b15636]"
                     />
                   </div>
-                  <div>
-                    <label className="font-semibold text-[#1d241d]">Width ({Math.round(selectedElement.width)}%)</label>
-                    <input
-                      type="range"
-                      min={20}
-                      max={100}
-                      value={selectedElement.width}
-                      onChange={(e) => updateSelected({ width: Number(e.target.value) })}
-                      className="mt-2 w-full accent-[#b15636]"
-                    />
+                )}
+                <div>
+                  <label className="font-semibold text-[#1d241d]">Width ({Math.round(selectedElement.width)}%)</label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    value={selectedElement.width}
+                    onChange={(e) => updateSelected({ width: Number(e.target.value) })}
+                    className="mt-2 w-full accent-[#b15636]"
+                  />
+                </div>
+              </div>
+
+              {/* Text Styling toggles */}
+              {selectedElement.type === "text" && (
+                <div>
+                  <label className="font-semibold text-[#1d241d]">Style & Alignment</label>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelected({ fontWeight: selectedElement.fontWeight === "bold" ? "normal" : "bold" })
+                      }
+                      className={`rounded-lg px-2.5 py-1.5 font-bold ${
+                        selectedElement.fontWeight === "bold" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelected({ fontStyle: selectedElement.fontStyle === "italic" ? "normal" : "italic" })
+                      }
+                      className={`rounded-lg px-2.5 py-1.5 italic ${
+                        selectedElement.fontStyle === "italic" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelected({
+                          textTransform: selectedElement.textTransform === "uppercase" ? "none" : "uppercase",
+                        })
+                      }
+                      className={`rounded-lg px-2.5 py-1.5 uppercase ${
+                        selectedElement.textTransform === "uppercase" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      AA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSelected({ textAlign: "left" })}
+                      className={`rounded-lg px-2.5 py-1.5 ${
+                        selectedElement.textAlign === "left" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      Left
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSelected({ textAlign: "center" })}
+                      className={`rounded-lg px-2.5 py-1.5 ${
+                        selectedElement.textAlign === "center" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      Center
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSelected({ textAlign: "right" })}
+                      className={`rounded-lg px-2.5 py-1.5 ${
+                        selectedElement.textAlign === "right" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3] border border-[#1d241d]/15"
+                      }`}
+                    >
+                      Right
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Styling toggles */}
+              {/* Text Color & Background Pill */}
               {selectedElement.type === "text" && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSelected({ fontWeight: selectedElement.fontWeight === "bold" ? "normal" : "bold" })
-                    }
-                    className={`rounded-lg px-2.5 py-1.5 font-bold ${
-                      selectedElement.fontWeight === "bold" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSelected({ fontStyle: selectedElement.fontStyle === "italic" ? "normal" : "italic" })
-                    }
-                    className={`rounded-lg px-2.5 py-1.5 italic ${
-                      selectedElement.fontStyle === "italic" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSelected({
-                        textTransform: selectedElement.textTransform === "uppercase" ? "none" : "uppercase",
-                      })
-                    }
-                    className={`rounded-lg px-2.5 py-1.5 uppercase ${
-                      selectedElement.textTransform === "uppercase" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    AA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateSelected({ textAlign: "left" })}
-                    className={`rounded-lg px-2.5 py-1.5 ${
-                      selectedElement.textAlign === "left" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    Left
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateSelected({ textAlign: "center" })}
-                    className={`rounded-lg px-2.5 py-1.5 ${
-                      selectedElement.textAlign === "center" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    Center
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateSelected({ textAlign: "right" })}
-                    className={`rounded-lg px-2.5 py-1.5 ${
-                      selectedElement.textAlign === "right" ? "bg-[#1d241d] text-white" : "bg-[#fdfaf3]"
-                    }`}
-                  >
-                    Right
-                  </button>
+                <div className="space-y-2 border-t border-[#1d241d]/10 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#1d241d]">Text Color</span>
+                    <input
+                      type="color"
+                      value={selectedElement.color || "#1d241d"}
+                      onChange={(e) => updateSelected({ color: e.target.value })}
+                      className="h-7 w-7 cursor-pointer rounded border-0"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#1d241d]">Background Pill</span>
+                    <div className="flex items-center gap-2">
+                      {selectedElement.backgroundColor && (
+                        <button
+                          type="button"
+                          onClick={() => updateSelected({ backgroundColor: undefined })}
+                          className="text-[0.65rem] text-red-600 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <input
+                        type="color"
+                        value={selectedElement.backgroundColor || "#f7f3eb"}
+                        onChange={(e) => updateSelected({ backgroundColor: e.target.value, borderRadius: 8 })}
+                        className="h-7 w-7 cursor-pointer rounded border-0"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Text Color */}
-              {selectedElement.type === "text" && (
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-semibold text-[#1d241d]">Text Color</span>
-                  <input
-                    type="color"
-                    value={selectedElement.color || "#1d241d"}
-                    onChange={(e) => updateSelected({ color: e.target.value })}
-                    className="h-7 w-7 cursor-pointer rounded border-0"
-                  />
+              {/* Image specific settings */}
+              {selectedElement.type === "image" && (
+                <div className="space-y-3 border-t border-[#1d241d]/10 pt-3">
+                  <p className="font-semibold text-[#1d241d]">Image Settings</p>
+                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-[#1d241d]/20 bg-[#fdfaf3] py-2 font-bold text-[#1d241d] hover:border-[#b15636]">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append("bookId", bookId);
+                        formData.append("image", file);
+                        const res = await fetch("/api/uploads", { method: "POST", body: formData });
+                        const data = await res.json();
+                        if (res.ok && data.url) {
+                          updateSelected({ content: data.url });
+                        }
+                      }}
+                    />
+                    <span>🔄 Replace Image</span>
+                  </label>
                 </div>
               )}
 
-              {/* Layer Controls & Delete */}
-              <div className="mt-6 border-t border-[#1d241d]/15 pt-4">
+              {/* Layer Controls & Duplication */}
+              <div className="border-t border-[#1d241d]/10 pt-3 space-y-2">
+                <p className="font-semibold text-[#1d241d]">Layer & Ordering</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={bringForward}
+                    className="rounded-lg border border-[#1d241d]/15 bg-white py-1.5 text-center font-medium text-[#52604e] hover:bg-[#e9e1d3]"
+                  >
+                    ⬆ Top
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendBackward}
+                    className="rounded-lg border border-[#1d241d]/15 bg-white py-1.5 text-center font-medium text-[#52604e] hover:bg-[#e9e1d3]"
+                  >
+                    ⬇ Bottom
+                  </button>
+                  <button
+                    type="button"
+                    onClick={duplicateSelected}
+                    className="rounded-lg border border-[#1d241d]/15 bg-white py-1.5 text-center font-medium text-[#52604e] hover:bg-[#e9e1d3]"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Delete */}
+              <div className="border-t border-[#1d241d]/15 pt-3">
                 <button
                   type="button"
                   onClick={() => deleteElement(selectedElement.id)}
-                  className="w-full rounded-xl border border-red-200 bg-red-50 py-2 font-bold text-red-700 transition hover:bg-red-100"
+                  className="w-full rounded-xl border border-red-200 bg-red-50 py-2.5 font-bold text-red-700 transition hover:bg-red-100"
                 >
                   Delete Element
                 </button>
@@ -1072,7 +1437,7 @@ export function CoverDesigner({
           ) : (
             <div className="mt-10 text-center text-[#66705f]">
               <p className="font-serif text-lg">No element selected</p>
-              <p className="mt-1">Click on any text or image on the canvas to edit its properties, or add new elements from the left panel.</p>
+              <p className="mt-1">Click on any text or image on the canvas or pick one from the &quot;Cover Elements&quot; list on the left to edit its properties.</p>
             </div>
           )}
         </aside>

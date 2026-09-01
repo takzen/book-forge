@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   createChapterAction,
+  createTocChapterAction,
   deleteChapterAction,
   reorderChaptersAction,
   updateBookDetailsAction,
@@ -16,6 +17,7 @@ type ChapterItem = {
   id: string;
   title: string;
   content: string;
+  type?: string;
   sortOrder: number;
 };
 
@@ -276,6 +278,7 @@ export function BookSidebar({
       <nav className="mt-3 flex-1 space-y-1 overflow-y-auto">
         {chapters.map((chapter, index) => {
           const isActive = chapter.id === activeChapterId;
+          const isToc = chapter.type === "toc" || chapter.title.toLowerCase().includes("spis treści") || chapter.title.toLowerCase().includes("table of contents");
           return (
             <div
               key={chapter.id}
@@ -289,10 +292,23 @@ export function BookSidebar({
                 href={`/books/${bookId}?chapter=${chapter.id}`}
                 className="flex min-w-0 flex-1 items-center gap-2.5 py-0.5"
               >
-                <span className={`text-xs ${isActive ? "text-[#f8f1dd]/70" : "text-[#8c9785]"}`}>
-                  {String(index + 1).padStart(2, "0")}
-                </span>
+                {isToc ? (
+                  <span className={`text-xs ${isActive ? "text-[#f8f1dd]" : "text-[#b15636]"}`}>
+                    📑
+                  </span>
+                ) : (
+                  <span className={`text-xs ${isActive ? "text-[#f8f1dd]/70" : "text-[#8c9785]"}`}>
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                )}
                 <span className="truncate">{chapter.title || "Untitled Chapter"}</span>
+                {isToc && (
+                  <span className={`ml-auto mr-2 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${
+                    isActive ? "bg-white/20 text-[#f8f1dd]" : "bg-[#e5d2bd] text-[#52604e]"
+                  }`}>
+                    TOC
+                  </span>
+                )}
               </Link>
 
               {/* Action controls (reorder, delete) */}
@@ -305,7 +321,7 @@ export function BookSidebar({
                 <button
                   onClick={() => handleMoveChapter(index, "up")}
                   disabled={index === 0}
-                  title="Move chapter up"
+                  title="Move up"
                   className={`rounded p-1 text-xs transition disabled:opacity-20 ${
                     isActive ? "hover:bg-white/20 text-[#f8f1dd]" : "hover:bg-[#1d241d]/10 text-[#52604e]"
                   }`}
@@ -317,7 +333,7 @@ export function BookSidebar({
                 <button
                   onClick={() => handleMoveChapter(index, "down")}
                   disabled={index === chapters.length - 1}
-                  title="Move chapter down"
+                  title="Move down"
                   className={`rounded p-1 text-xs transition disabled:opacity-20 ${
                     isActive ? "hover:bg-white/20 text-[#f8f1dd]" : "hover:bg-[#1d241d]/10 text-[#52604e]"
                   }`}
@@ -330,7 +346,7 @@ export function BookSidebar({
                   <button
                     onClick={() => handleDeleteChapter(chapter.id)}
                     disabled={deletingChapterId === chapter.id}
-                    title="Delete chapter"
+                    title="Delete"
                     className={`rounded p-1 text-xs transition ${
                       isActive
                         ? "text-[#f8f1dd]/70 hover:bg-white/20 hover:text-red-300"
@@ -346,13 +362,29 @@ export function BookSidebar({
         })}
       </nav>
 
-      {/* Add chapter button */}
-      <form action={createChapterAction} className="mt-3">
-        <input type="hidden" name="bookId" value={bookId} />
-        <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#1d241d]/25 bg-[#fdfaf3]/50 px-3 py-2.5 text-sm font-semibold text-[#52604e] transition hover:border-[#b15636] hover:bg-[#fdfaf3] hover:text-[#b15636]">
-          <span>+</span> Add chapter
-        </button>
-      </form>
+      {/* Add chapter and TOC buttons */}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <form action={createChapterAction}>
+          <input type="hidden" name="bookId" value={bookId} />
+          <button
+            type="submit"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#1d241d]/25 bg-[#fdfaf3]/50 px-2 py-2 text-xs font-bold text-[#52604e] transition hover:border-[#b15636] hover:bg-[#fdfaf3] hover:text-[#b15636]"
+          >
+            <span>+</span> Rozdział
+          </button>
+        </form>
+
+        <form action={createTocChapterAction}>
+          <input type="hidden" name="bookId" value={bookId} />
+          <button
+            type="submit"
+            title="Dodaj dedykowany spis treści do książki"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#b15636]/40 bg-[#fdfaf3]/50 px-2 py-2 text-xs font-bold text-[#b15636] transition hover:border-[#b15636] hover:bg-[#fdfaf3]"
+          >
+            <span>📑</span> + Spis treści
+          </button>
+        </form>
+      </div>
 
       {/* Bottom footer status */}
       <div className="mt-6 border-t border-[#1d241d]/15 pt-4 text-xs text-[#66705f]">

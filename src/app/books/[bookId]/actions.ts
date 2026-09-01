@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   createChapter,
+  createTocChapter,
+  generateTocMarkdown,
   deleteBook,
   deleteChapter,
   getBook,
@@ -22,6 +24,27 @@ export async function createChapterAction(formData: FormData) {
   const chapterId = createChapter(bookId);
   revalidatePath(`/books/${bookId}`);
   redirect(`/books/${bookId}?chapter=${chapterId}`);
+}
+
+export async function createTocChapterAction(formData: FormData) {
+  const bookId = String(formData.get("bookId") ?? "");
+
+  if (!bookId || !getBook(bookId)) {
+    redirect("/dashboard");
+  }
+
+  const chapterId = createTocChapter(bookId);
+  revalidatePath(`/books/${bookId}`);
+  redirect(`/books/${bookId}?chapter=${chapterId}`);
+}
+
+export async function refreshTocContentAction(bookId: string) {
+  if (!bookId || !getBook(bookId)) {
+    return { success: false, content: "" };
+  }
+
+  const content = generateTocMarkdown(bookId);
+  return { success: true, content };
 }
 
 export async function saveChapterAction(formData: FormData) {

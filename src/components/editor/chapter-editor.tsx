@@ -10,13 +10,14 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { autosaveChapterAction, saveChapterAction } from "@/app/books/[bookId]/actions";
+import { autosaveChapterAction, refreshTocContentAction, saveChapterAction } from "@/app/books/[bookId]/actions";
 
 type ChapterEditorProps = {
   bookId: string;
   chapterId: string;
   initialTitle: string;
   initialContent: string;
+  chapterType?: string;
   saved?: boolean;
   hasError?: boolean;
 };
@@ -29,6 +30,7 @@ export function ChapterEditor({
   chapterId,
   initialTitle,
   initialContent,
+  chapterType = "chapter",
   saved = false,
   hasError = false,
 }: ChapterEditorProps) {
@@ -42,6 +44,7 @@ export function ChapterEditor({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const isTocChapter = chapterType === "toc";
 
   // Keep track of values for timer cleanup
   const currentValuesRef = useRef({ title, content });
@@ -479,15 +482,32 @@ export function ChapterEditor({
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold text-[#b15636] transition hover:bg-[#b15636]/10">
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            accept="image/*"
             className="sr-only"
             onChange={insertImage}
+            disabled={uploading}
           />
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {uploading ? "Uploading…" : "Insert image"}
+          <span>🖼 {uploading ? "Uploading…" : "Add image"}</span>
         </label>
+
+        {/* Generate / Refresh Table of Contents */}
+        {isTocChapter && (
+          <button
+            type="button"
+            onClick={async () => {
+              const res = await refreshTocContentAction(bookId);
+              if (res.success && res.content) {
+                setContent(res.content);
+                performSave(title, res.content);
+              }
+            }}
+            title="Odśwież automatyczny spis treści ze wszystkimi rozdziałami książki"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[#284c42]/10 px-2.5 py-1 text-xs font-bold text-[#284c42] transition hover:bg-[#284c42] hover:text-[#f8f1dd]"
+          >
+            <span>📑</span>
+            <span>Odśwież spis treści</span>
+          </button>
+        )}
       </div>
 
       {uploadError && (

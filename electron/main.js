@@ -86,7 +86,8 @@ function startNextServerIfNeeded() {
           NODE_ENV: action === "start" ? "production" : "development",
         },
         shell: false,
-        stdio: "inherit",
+        windowsHide: true,
+        stdio: isDev ? "pipe" : "ignore",
       });
 
       serverProcess.on("error", (err) => {

@@ -171,6 +171,70 @@ export function reorderChapters(bookId: string, orderedChapterIds: string[]) {
   });
 }
 
+export function generateTocMarkdown(bookId: string): string {
+  const chapterList = listChapters(bookId);
+  const regularChapters = chapterList.filter((ch) => ch.type !== "toc");
+
+  if (regularChapters.length === 0) {
+    return "# Spis treści\n\n*Brak rozdziałów do wyświetlenia.*";
+  }
+
+  let md = "# Spis treści\n\n";
+  regularChapters.forEach((ch, idx) => {
+    const num = String(idx + 1).padStart(2, "0");
+    md += `${idx + 1}. **${ch.title || "Rozdział " + (idx + 1)}**\n`;
+  });
+
+  return md;
+}
+
+export function createTocChapter(bookId: string) {
+  const db = getDb();
+  const now = Date.now();
+  const tocContent = generateTocMarkdown(bookId);
+  const existingChapters = listChapters(bookId);
+  const existingToc = existingChapters.find((chapter) => chapter.type === "toc");
+
+  if (existingToc) {
+    db.transaction((tx) => {
+      tx.update(chapters)
+        .set({ content: tocContent, updatedAt: now })
+        .where(and(eq(chapters.id, existingToc.id), eq(chapters.bookId, bookId)))
+        .run();
+      tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
+    });
+    return existingToc.id;
+  }
+
+  const chapterId = randomUUID();
+
+  db.transaction((tx) => {
+    existingChapters.forEach((ch, idx) => {
+      tx.update(chapters)
+        .set({ sortOrder: idx + 1, updatedAt: now })
+        .where(eq(chapters.id, ch.id))
+        .run();
+    });
+
+    tx.insert(chapters)
+      .values({
+        id: chapterId,
+        bookId,
+        title: "Spis treści",
+        content: tocContent,
+        type: "toc",
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
+  });
+
+  return chapterId;
+}
+
 export function createChapter(bookId: string) {
   const db = getDb();
   const lastChapter = db

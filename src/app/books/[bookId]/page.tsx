@@ -42,6 +42,7 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
               chapterId={activeChapter.id}
               initialTitle={activeChapter.title}
               initialContent={activeChapter.content}
+              chapterType={activeChapter.type}
               saved={query.saved === "1"}
               hasError={Boolean(query.error)}
             />
