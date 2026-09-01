@@ -2,8 +2,9 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/takzen/book-forge/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg?style=for-the-badge)](https://github.com/takzen/book-forge/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](./LICENSE)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -64,12 +65,18 @@ New Book ➔ Add Chapters & Outline ➔ Write in Markdown ➔ Add Local Images �
 - **Full ZIP Export**: Download your project as a self-contained `.zip` archive containing `book.json`, individual chapter `.md` files, and the `uploads/` folder.
 - **ZIP Import**: Restore or migrate books across machines effortlessly.
 
+### 🖥️ 6. Native Desktop Experience (Electron)
+- **Standalone Window**: Runs as a lightweight local desktop app without browser toolbars.
+- **Dynamic Zoom Controls**: Full zooming support via `Ctrl` + `+` / `-`, `Ctrl` + `0` (reset), and `Ctrl` + Mouse Wheel scroll.
+- **Offline & Private**: Completely isolated on your local machine with automatic background server lifecycle management.
+
 ---
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
 |---|---|
+| **Desktop Wrapper** | [Electron 44](https://www.electronjs.org/) (Native window, auto-start, zoom integration) |
 | **Framework** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack, Server Actions) |
 | **Language** | [TypeScript 5](https://www.typescriptlang.org/) |
 | **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) |
@@ -105,18 +112,24 @@ New Book ➔ Add Chapters & Outline ➔ Write in Markdown ➔ Add Local Images �
    pnpm exec playwright install chromium
    ```
 
-4. **Start the local development server:**
+4. **Start Book Forge as a Desktop App (Electron):**
+   ```bash
+   pnpm electron:dev
+   ```
+
+   *Alternatively, to run only in the web browser:*
    ```bash
    pnpm dev
    ```
-
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
 ## 🧪 Available Scripts
 
-- `pnpm dev` — Start the Next.js development server.
+- `pnpm electron:dev` — Start the application in an Electron desktop window with hot reload.
+- `pnpm electron:start` — Run the production build in an Electron window.
+- `pnpm electron` — Open the Electron wrapper directly.
+- `pnpm dev` — Start the Next.js development server (browser mode).
 - `pnpm build` — Build the optimized production application.
 - `pnpm start` — Start the production server.
 - `pnpm test` — Run the automated test suite with Vitest.

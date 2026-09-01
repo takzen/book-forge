@@ -1,7 +1,8 @@
 {
   "name": "book-forge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,7 +10,10 @@
     "lint": "eslint",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "electron": "electron .",
+    "electron:dev": "concurrently -k -n \"NEXT,ELECTRON\" -c \"cyan,magenta\" \"next dev\" \"wait-on http://127.0.0.1:3000 && electron .\"",
+    "electron:start": "cross-env NODE_ENV=production concurrently -k -n \"NEXT,ELECTRON\" -c \"green,blue\" \"next start\" \"wait-on http://127.0.0.1:3000 && electron .\""
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",
@@ -29,12 +33,16 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
+    "electron": "^44.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wait-on": "^9.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
