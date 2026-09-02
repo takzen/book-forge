@@ -279,6 +279,11 @@ export function BookSidebar({
         {chapters.map((chapter, index) => {
           const isActive = chapter.id === activeChapterId;
           const isToc = chapter.type === "toc" || chapter.title.toLowerCase().includes("spis treści") || chapter.title.toLowerCase().includes("table of contents");
+          const existingTocs = chapters.filter((c) => c.type === "toc" || c.title.toLowerCase().includes("spis treści") || c.title.toLowerCase().includes("table of contents"));
+          const regularChapters = chapters.filter((c) => !existingTocs.some((t) => t.id === c.id));
+          const tocIdx = existingTocs.findIndex((t) => t.id === chapter.id);
+          const regIdx = regularChapters.findIndex((r) => r.id === chapter.id);
+
           return (
             <div
               key={chapter.id}
@@ -298,7 +303,7 @@ export function BookSidebar({
                   </span>
                 ) : (
                   <span className={`text-xs ${isActive ? "text-[#f8f1dd]/70" : "text-[#8c9785]"}`}>
-                    {String(index + 1).padStart(2, "0")}
+                    {String(regIdx + 1).padStart(2, "0")}
                   </span>
                 )}
                 <span className="truncate">{chapter.title || "Untitled Chapter"}</span>
@@ -306,7 +311,7 @@ export function BookSidebar({
                   <span className={`ml-auto mr-2 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${
                     isActive ? "bg-white/20 text-[#f8f1dd]" : "bg-[#e5d2bd] text-[#52604e]"
                   }`}>
-                    TOC
+                    {existingTocs.length > 1 ? `TOC · Str. ${tocIdx + 1}` : "TOC"}
                   </span>
                 )}
               </Link>
@@ -378,10 +383,10 @@ export function BookSidebar({
           <input type="hidden" name="bookId" value={bookId} />
           <button
             type="submit"
-            title="Dodaj dedykowany spis treści do książki"
+            title="Wstaw nową stronę spisu treści (możesz dodać wiele stron spisu)"
             className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#b15636]/40 bg-[#fdfaf3]/50 px-2 py-2 text-xs font-bold text-[#b15636] transition hover:border-[#b15636] hover:bg-[#fdfaf3]"
           >
-            <span>📑</span> + Spis treści
+            <span>📑</span> + Strona spisu
           </button>
         </form>
       </div>

@@ -10,6 +10,7 @@ type ChapterItem = {
   title: string;
   content: string;
   sortOrder: number;
+  type?: string;
 };
 
 type BookPreviewProps = {
@@ -277,49 +278,25 @@ export function BookPreview({
           </div>
         </section>
 
-        {/* 3. TABLE OF CONTENTS (SPIS TREŚCI) */}
-        <section
-          style={{
-            width: `${currentFormat.widthMm * 3.78}px`,
-            minHeight: `${currentFormat.heightMm * 3.78}px`,
-          }}
-          className="book-page flex flex-col bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
-        >
-          <header className="border-b border-[#1d241d]/15 pb-4 text-center">
-            <h2 className="font-serif text-2xl font-bold tracking-tight text-[#1d241d] uppercase">Contents</h2>
-            <p className="mt-1 text-xs text-[#66705f]">Spis Treści</p>
-          </header>
+        {/* 3. TABLE OF CONTENTS (MULTI-PAGE SPIS TREŚCI) */}
+        {(() => {
+          const isTocItem = (ch: ChapterItem) =>
+            ch.type === "toc" ||
+            ch.title.toLowerCase().includes("spis treści") ||
+            ch.title.toLowerCase().includes("table of contents");
 
-          <nav className="mt-8 flex-1 space-y-4 text-sm">
-            {chapters.map((chapter, index) => {
-              const words = chapter.content.trim().match(/\S+/g)?.length ?? 0;
-              return (
-                <a
-                  key={chapter.id}
-                  href={`#chapter-${chapter.id}`}
-                  className="group flex items-baseline justify-between border-b border-dotted border-[#1d241d]/20 pb-1 text-[#1d241d] transition hover:text-[#b15636]"
-                >
-                  <span className="font-serif font-semibold">
-                    <span className="mr-3 font-sans text-xs text-[#b15636]">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    {chapter.title || "Untitled Chapter"}
-                  </span>
-                  <span className="font-mono text-xs text-[#66705f]">
-                    {words} words
-                  </span>
-                </a>
-              );
-            })}
-          </nav>
+          const tocChapters = chapters.filter(isTocItem);
+          const regularChapters = chapters.filter((ch) => !isTocItem(ch));
 
-          <footer className="mt-8 border-t border-[#1d241d]/10 pt-4 text-center text-xs text-[#8c9785]">
-            Table of Contents
-          </footer>
-        </section>
+          const tocItemsPerPage = bookFormat === "a4" ? 20 : bookFormat === "six-by-nine" ? 16 : 14;
+          const autoTocPages: ChapterItem[][] = [];
+          for (let i = 0; i < regularChapters.length; i += tocItemsPerPage) {
+            autoTocPages.push(regularChapters.slice(i, i + tocItemsPerPage));
+          }
+          if (autoTocPages.length === 0) {
+            autoTocPages.push([]);
+          }
 
-        {/* 4. CHAPTER PAGES */}
-        {chapters.map((chapter, index) => {
           const fontClass =
             fontFamily === "serif"
               ? "font-serif"
@@ -327,52 +304,176 @@ export function BookPreview({
               ? "font-mono"
               : "font-sans";
 
-          return (
-            <section
-              key={chapter.id}
-              id={`chapter-${chapter.id}`}
-              style={{
-                width: `${currentFormat.widthMm * 3.78}px`,
-                minHeight: `${currentFormat.heightMm * 3.78}px`,
-                fontSize: `${fontSize}pt`,
-              }}
-              className="book-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
-            >
-              {/* Header running title */}
-              <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.7rem] text-[#66705f]">
-                <span className="font-serif italic">{bookTitle}</span>
-                <span className="font-sans uppercase tracking-wider">Chapter {index + 1}</span>
-              </div>
+          if (tocChapters.length > 0) {
+            return tocChapters.map((tocCh, pageIdx) => {
+              const isFirstPage = pageIdx === 0;
+              const pageNum = 3 + pageIdx;
 
-              {/* Chapter Content Body */}
-              <div className="flex-1 py-8">
-                <div className="mb-8">
-                  <p className="text-xs font-bold tracking-[0.2em] text-[#b15636] uppercase">
-                    Chapter {index + 1}
-                  </p>
-                  <h2 className="mt-1 font-serif text-3xl font-bold tracking-tight text-[#1d241d]">
-                    {chapter.title}
+              return (
+                <section
+                  key={tocCh.id}
+                  id={`chapter-${tocCh.id}`}
+                  style={{
+                    width: `${currentFormat.widthMm * 3.78}px`,
+                    minHeight: `${currentFormat.heightMm * 3.78}px`,
+                    fontSize: `${fontSize}pt`,
+                  }}
+                  className="book-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
+                >
+                  <header className="border-b border-[#1d241d]/15 pb-4 text-center">
+                    <h2 className="font-serif text-2xl font-bold tracking-tight text-[#1d241d] uppercase">
+                      {isFirstPage ? "Contents" : "Contents (cont.)"}
+                    </h2>
+                    <p className="mt-1 text-xs text-[#66705f]">
+                      {tocCh.title || "Spis Treści"}
+                      {tocChapters.length > 1 && ` · Strona ${pageIdx + 1} z ${tocChapters.length}`}
+                    </p>
+                  </header>
+
+                  <div className="my-6 flex-1">
+                    <article
+                      className={`markdown-preview book-typography ${fontClass} leading-relaxed text-[#222822]`}
+                      style={{ fontSize: `${fontSize}pt` }}
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {tocCh.content}
+                      </ReactMarkdown>
+                    </article>
+                  </div>
+
+                  <footer className="border-t border-[#1d241d]/10 pt-4 text-center text-xs text-[#8c9785]">
+                    — {pageNum} —
+                  </footer>
+                </section>
+              );
+            });
+          }
+
+          return autoTocPages.map((pageChapters, pageIdx) => {
+            const isFirstPage = pageIdx === 0;
+            const pageNum = 3 + pageIdx;
+
+            return (
+              <section
+                key={`auto-toc-page-${pageIdx}`}
+                style={{
+                  width: `${currentFormat.widthMm * 3.78}px`,
+                  minHeight: `${currentFormat.heightMm * 3.78}px`,
+                }}
+                className="book-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
+              >
+                <header className="border-b border-[#1d241d]/15 pb-4 text-center">
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-[#1d241d] uppercase">
+                    {isFirstPage ? "Contents" : "Contents (cont.)"}
                   </h2>
-                  <div className="mt-4 h-[1px] w-12 bg-[#b15636]" />
+                  <p className="mt-1 text-xs text-[#66705f]">
+                    {isFirstPage ? "Spis Treści" : "Spis Treści (cd.)"}
+                    {autoTocPages.length > 1 && ` · Strona ${pageIdx + 1} z ${autoTocPages.length}`}
+                  </p>
+                </header>
+
+                <nav className="my-6 flex-1 space-y-3 text-sm">
+                  {pageChapters.map((chapter, itemIdx) => {
+                    const globalIdx = pageIdx * tocItemsPerPage + itemIdx;
+                    const words = chapter.content.trim().match(/\S+/g)?.length ?? 0;
+                    return (
+                      <a
+                        key={chapter.id}
+                        href={`#chapter-${chapter.id}`}
+                        className="group flex items-baseline justify-between border-b border-dotted border-[#1d241d]/20 pb-1 text-[#1d241d] transition hover:text-[#b15636]"
+                      >
+                        <span className="font-serif font-semibold">
+                          <span className="mr-3 font-sans text-xs text-[#b15636]">
+                            {String(globalIdx + 1).padStart(2, "0")}
+                          </span>
+                          {chapter.title || "Untitled Chapter"}
+                        </span>
+                        <span className="font-mono text-xs text-[#66705f]">
+                          {words} words
+                        </span>
+                      </a>
+                    );
+                  })}
+                </nav>
+
+                <footer className="border-t border-[#1d241d]/10 pt-4 text-center text-xs text-[#8c9785]">
+                  — {pageNum} —
+                </footer>
+              </section>
+            );
+          });
+        })()}
+
+        {/* 4. CHAPTER PAGES */}
+        {(() => {
+          const isTocItem = (ch: ChapterItem) =>
+            ch.type === "toc" ||
+            ch.title.toLowerCase().includes("spis treści") ||
+            ch.title.toLowerCase().includes("table of contents");
+
+          const tocChapters = chapters.filter(isTocItem);
+          const regularChapters = chapters.filter((ch) => !isTocItem(ch));
+          const tocItemsPerPage = bookFormat === "a4" ? 20 : bookFormat === "six-by-nine" ? 16 : 14;
+          const autoTocPagesCount = Math.max(1, Math.ceil(regularChapters.length / tocItemsPerPage));
+          const totalTocPagesCount = tocChapters.length > 0 ? tocChapters.length : autoTocPagesCount;
+
+          const fontClass =
+            fontFamily === "serif"
+              ? "font-serif"
+              : fontFamily === "mono"
+              ? "font-mono"
+              : "font-sans";
+
+          return regularChapters.map((chapter, index) => {
+            const pageNum = 3 + totalTocPagesCount + index;
+
+            return (
+              <section
+                key={chapter.id}
+                id={`chapter-${chapter.id}`}
+                style={{
+                  width: `${currentFormat.widthMm * 3.78}px`,
+                  minHeight: `${currentFormat.heightMm * 3.78}px`,
+                  fontSize: `${fontSize}pt`,
+                }}
+                className="book-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
+              >
+                {/* Header running title */}
+                <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.7rem] text-[#66705f]">
+                  <span className="font-serif italic">{bookTitle}</span>
+                  <span className="font-sans uppercase tracking-wider">Chapter {index + 1}</span>
                 </div>
 
-                <article
-                  className={`markdown-preview book-typography ${fontClass} leading-relaxed text-[#222822]`}
-                  style={{ fontSize: `${fontSize}pt` }}
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {chapter.content}
-                  </ReactMarkdown>
-                </article>
-              </div>
+                {/* Chapter Content Body */}
+                <div className="flex-1 py-8">
+                  <div className="mb-8">
+                    <p className="text-xs font-bold tracking-[0.2em] text-[#b15636] uppercase">
+                      Chapter {index + 1}
+                    </p>
+                    <h2 className="mt-1 font-serif text-3xl font-bold tracking-tight text-[#1d241d]">
+                      {chapter.title}
+                    </h2>
+                    <div className="mt-4 h-[1px] w-12 bg-[#b15636]" />
+                  </div>
 
-              {/* Page Footer Number */}
-              <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f]">
-                — {index + 4} —
-              </div>
-            </section>
-          );
-        })}
+                  <article
+                    className={`markdown-preview book-typography ${fontClass} leading-relaxed text-[#222822]`}
+                    style={{ fontSize: `${fontSize}pt` }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {chapter.content}
+                    </ReactMarkdown>
+                  </article>
+                </div>
+
+                {/* Page Footer Number */}
+                <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f]">
+                  — {pageNum} —
+                </div>
+              </section>
+            );
+          });
+        })()}
       </main>
     </div>
   );

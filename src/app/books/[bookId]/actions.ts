@@ -38,12 +38,12 @@ export async function createTocChapterAction(formData: FormData) {
   redirect(`/books/${bookId}?chapter=${chapterId}`);
 }
 
-export async function refreshTocContentAction(bookId: string) {
+export async function refreshTocContentAction(bookId: string, chapterId?: string) {
   if (!bookId || !getBook(bookId)) {
     return { success: false, content: "" };
   }
 
-  const content = generateTocMarkdown(bookId);
+  const content = generateTocMarkdown(bookId, chapterId);
   return { success: true, content };
 }
 

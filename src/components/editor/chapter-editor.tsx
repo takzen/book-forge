@@ -10,7 +10,7 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { autosaveChapterAction, refreshTocContentAction, saveChapterAction } from "@/app/books/[bookId]/actions";
+import { autosaveChapterAction, createTocChapterAction, refreshTocContentAction, saveChapterAction } from "@/app/books/[bookId]/actions";
 
 type ChapterEditorProps = {
   bookId: string;
@@ -490,23 +490,37 @@ export function ChapterEditor({
           <span>🖼 {uploading ? "Uploading…" : "Add image"}</span>
         </label>
 
-        {/* Generate / Refresh Table of Contents */}
+        {/* Generate / Refresh / Add Table of Contents pages */}
         {isTocChapter && (
-          <button
-            type="button"
-            onClick={async () => {
-              const res = await refreshTocContentAction(bookId);
-              if (res.success && res.content) {
-                setContent(res.content);
-                performSave(title, res.content);
-              }
-            }}
-            title="Odśwież automatyczny spis treści ze wszystkimi rozdziałami książki"
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[#284c42]/10 px-2.5 py-1 text-xs font-bold text-[#284c42] transition hover:bg-[#284c42] hover:text-[#f8f1dd]"
-          >
-            <span>📑</span>
-            <span>Odśwież spis treści</span>
-          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await refreshTocContentAction(bookId, chapterId);
+                if (res.success && res.content) {
+                  setContent(res.content);
+                  performSave(title, res.content);
+                }
+              }}
+              title="Odśwież rozdziały dla tej strony spisu treści"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#284c42]/10 px-2.5 py-1 text-xs font-bold text-[#284c42] transition hover:bg-[#284c42] hover:text-[#f8f1dd]"
+            >
+              <span>📑</span>
+              <span>Odśwież tę stronę spisu</span>
+            </button>
+
+            <form action={createTocChapterAction}>
+              <input type="hidden" name="bookId" value={bookId} />
+              <button
+                type="submit"
+                title="Wstaw nową kolejną stronę spisu treści"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#b15636] px-2.5 py-1 text-xs font-bold text-white transition hover:bg-[#964225] shadow-xs"
+              >
+                <span>+</span>
+                <span>Wstaw kolejną stronę spisu</span>
+              </button>
+            </form>
+          </div>
         )}
       </div>
 

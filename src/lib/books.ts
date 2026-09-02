@@ -171,18 +171,45 @@ export function reorderChapters(bookId: string, orderedChapterIds: string[]) {
   });
 }
 
-export function generateTocMarkdown(bookId: string): string {
+export function generateTocMarkdown(
+  bookId: string,
+  pageOrChapterId?: number | string,
+  itemsPerPage = 16
+): string {
   const chapterList = listChapters(bookId);
   const regularChapters = chapterList.filter((ch) => ch.type !== "toc");
+  const existingTocs = chapterList.filter((ch) => ch.type === "toc");
 
   if (regularChapters.length === 0) {
     return "# Spis treści\n\n*Brak rozdziałów do wyświetlenia.*";
   }
 
-  let md = "# Spis treści\n\n";
-  regularChapters.forEach((ch, idx) => {
-    const num = String(idx + 1).padStart(2, "0");
-    md += `${idx + 1}. **${ch.title || "Rozdział " + (idx + 1)}**\n`;
+  let pageNumber = 1;
+  if (typeof pageOrChapterId === "number") {
+    pageNumber = Math.max(1, pageOrChapterId);
+  } else if (typeof pageOrChapterId === "string" && pageOrChapterId) {
+    const idx = existingTocs.findIndex((t) => t.id === pageOrChapterId);
+    if (idx !== -1) {
+      pageNumber = idx + 1;
+    }
+  }
+
+  const startIndex = (pageNumber - 1) * itemsPerPage;
+  const pageItems = regularChapters.slice(startIndex, startIndex + itemsPerPage);
+
+  if (pageItems.length === 0 && pageNumber > 1) {
+    return `### Spis treści (cd. — strona ${pageNumber})\n\n*(Kolejne rozdziały lub brak kolejnych pozycji na tej stronie)*\n`;
+  }
+
+  const titleHeader =
+    pageNumber === 1
+      ? "# Spis treści\n\n"
+      : `### Spis treści (cd. — strona ${pageNumber})\n\n`;
+
+  let md = titleHeader;
+  pageItems.forEach((ch, idx) => {
+    const globalIdx = startIndex + idx;
+    md += `${globalIdx + 1}. **${ch.title || "Rozdział " + (globalIdx + 1)}**\n`;
   });
 
   return md;
@@ -191,39 +218,40 @@ export function generateTocMarkdown(bookId: string): string {
 export function createTocChapter(bookId: string) {
   const db = getDb();
   const now = Date.now();
-  const tocContent = generateTocMarkdown(bookId);
   const existingChapters = listChapters(bookId);
-  const existingToc = existingChapters.find((chapter) => chapter.type === "toc");
+  const existingTocs = existingChapters.filter((chapter) => chapter.type === "toc");
 
-  if (existingToc) {
-    db.transaction((tx) => {
-      tx.update(chapters)
-        .set({ content: tocContent, updatedAt: now })
-        .where(and(eq(chapters.id, existingToc.id), eq(chapters.bookId, bookId)))
-        .run();
-      tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
-    });
-    return existingToc.id;
+  const pageNumber = existingTocs.length + 1;
+  const title = pageNumber === 1 ? "Spis treści" : `Spis treści (strona ${pageNumber})`;
+  const chapterId = randomUUID();
+  const tocContent = generateTocMarkdown(bookId, pageNumber);
+
+  // Insert right after the last TOC page, or at sortOrder: 0 if first
+  let insertSortOrder = 0;
+  if (existingTocs.length > 0) {
+    const lastToc = existingTocs[existingTocs.length - 1];
+    insertSortOrder = lastToc.sortOrder + 1;
   }
 
-  const chapterId = randomUUID();
-
   db.transaction((tx) => {
-    existingChapters.forEach((ch, idx) => {
-      tx.update(chapters)
-        .set({ sortOrder: idx + 1, updatedAt: now })
-        .where(eq(chapters.id, ch.id))
-        .run();
+    // Shift subsequent chapters down by 1
+    existingChapters.forEach((ch) => {
+      if (ch.sortOrder >= insertSortOrder) {
+        tx.update(chapters)
+          .set({ sortOrder: ch.sortOrder + 1, updatedAt: now })
+          .where(eq(chapters.id, ch.id))
+          .run();
+      }
     });
 
     tx.insert(chapters)
       .values({
         id: chapterId,
         bookId,
-        title: "Spis treści",
+        title,
         content: tocContent,
         type: "toc",
-        sortOrder: 0,
+        sortOrder: insertSortOrder,
         createdAt: now,
         updatedAt: now,
       })
