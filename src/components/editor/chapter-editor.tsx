@@ -619,7 +619,7 @@ export function ChapterEditor({
           <div className={`flex h-full min-h-0 flex-col ${viewMode === "preview" ? "xl:col-span-2" : ""}`}>
             <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
               <span>
-                Strony książki ({currentFormat.name}) · {isToc ? "Spis treści" : `Rozdział ${chapterNumber}`} · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}
+                Strony książki ({currentFormat.name}) · {title.trim() || "Rozdział"} · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}
               </span>
               <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">
                 strony {startPageNumber}–{startPageNumber + bookPages.length - 1} w książce
@@ -642,12 +642,8 @@ export function ChapterEditor({
                       {bookTitle || "Książka"}
                     </span>
                     <span className="font-sans uppercase tracking-wider text-[0.7rem] text-[#b15636] font-semibold truncate max-w-[240px]">
-                      {isToc
-                        ? pageIndex === 0
-                          ? "Spis treści"
-                          : "Spis treści (cd.)"
-                        : pageIndex === 0
-                        ? `Rozdział ${chapterNumber}: ${title.trim() || "Bez tytułu"}`
+                      {pageIndex === 0
+                        ? title.trim() || "Rozdział"
                         : `${title.trim() || "Rozdział"} (cd.)`}
                     </span>
                   </div>
