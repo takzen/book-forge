@@ -20,7 +20,28 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
   }
 
   const chapters = listChapters(bookId);
-  const activeChapter = chapters.find((chapter) => chapter.id === query.chapter) ?? chapters[0];
+  const activeIndex = chapters.findIndex((chapter) => chapter.id === query.chapter);
+  const activeChapterIndex = activeIndex !== -1 ? activeIndex : 0;
+  const activeChapter = chapters[activeChapterIndex];
+
+  const isTocItem = (ch: (typeof chapters)[0]) =>
+    ch.type === "toc" ||
+    ch.title.toLowerCase().includes("spis treści") ||
+    ch.title.toLowerCase().includes("table of contents");
+
+  const regularChapters = chapters.filter((c) => !isTocItem(c));
+  const isCurrentToc = activeChapter ? isTocItem(activeChapter) : false;
+  const regularIndex = activeChapter ? regularChapters.findIndex((c) => c.id === activeChapter.id) : -1;
+  const chapterNumber = isCurrentToc ? 0 : regularIndex !== -1 ? regularIndex + 1 : 1;
+
+  // Calculate start page number based on preceding chapters
+  const wordsPerPage = book.format === "a4" ? 450 : book.format === "six-by-nine" ? 280 : 240;
+  let startPageNumber = 4; // Cover(1), Title(2), Copyright(3)
+  for (let i = 0; i < activeChapterIndex; i++) {
+    const chWords = (chapters[i].content.trim().match(/\S+/g) || []).length;
+    const pagesCount = Math.max(1, Math.ceil(chWords / wordsPerPage));
+    startPageNumber += pagesCount;
+  }
 
   return (
     <main className="h-screen overflow-hidden bg-[#e9e1d3] text-[#1d241d]">
@@ -40,6 +61,8 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
               key={activeChapter.id}
               bookId={bookId}
               chapterId={activeChapter.id}
+              chapterNumber={chapterNumber}
+              startPageNumber={startPageNumber}
               initialTitle={activeChapter.title}
               initialContent={activeChapter.content}
               chapterType={activeChapter.type}

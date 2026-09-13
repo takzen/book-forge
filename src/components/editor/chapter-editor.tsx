@@ -21,6 +21,8 @@ type ChapterEditorProps = {
   chapterType?: string;
   bookTitle?: string;
   bookFormat?: string;
+  chapterNumber?: number;
+  startPageNumber?: number;
   saved?: boolean;
   hasError?: boolean;
 };
@@ -28,10 +30,14 @@ type ChapterEditorProps = {
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 type ViewMode = "split" | "editor" | "preview";
 
-const formatDimensions: Record<string, { name: string; widthMm: number; heightMm: number }> = {
-  a5: { name: "A5", widthMm: 148, heightMm: 210 },
-  "six-by-nine": { name: "6 × 9 in", widthMm: 152.4, heightMm: 228.6 },
-  a4: { name: "A4", widthMm: 210, heightMm: 297 },
+const formatDimensions: Record<
+  string,
+  { name: string; widthMm: number; heightMm: number; fontSizePt: number; lineHeight: number }
+> = {
+  a5: { name: "A5", widthMm: 148, heightMm: 210, fontSizePt: 10.5, lineHeight: 1.6 },
+  b5: { name: "B5", widthMm: 170, heightMm: 240, fontSizePt: 11, lineHeight: 1.6 },
+  "six-by-nine": { name: "6 × 9 in", widthMm: 152.4, heightMm: 228.6, fontSizePt: 11, lineHeight: 1.6 },
+  a4: { name: "A4", widthMm: 210, heightMm: 297, fontSizePt: 12, lineHeight: 1.65 },
 };
 
 export function ChapterEditor({
@@ -42,6 +48,8 @@ export function ChapterEditor({
   chapterType = "chapter",
   bookTitle = "",
   bookFormat = "a5",
+  chapterNumber = 1,
+  startPageNumber = 4,
   saved = false,
   hasError = false,
 }: ChapterEditorProps) {
@@ -55,7 +63,12 @@ export function ChapterEditor({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
-  const isTocChapter = chapterType === "toc";
+  const isToc =
+    chapterType === "toc" ||
+    title.toLowerCase().includes("spis treści") ||
+    title.toLowerCase().includes("table of contents") ||
+    chapterNumber === 0;
+  const isTocChapter = isToc;
   const currentFormat = formatDimensions[bookFormat] || formatDimensions.a5;
 
   // Keep track of values for timer cleanup
@@ -605,8 +618,12 @@ export function ChapterEditor({
         {(viewMode === "split" || viewMode === "preview") && (
           <div className={`flex h-full min-h-0 flex-col ${viewMode === "preview" ? "xl:col-span-2" : ""}`}>
             <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
-              <span>Strony książki ({currentFormat.name}) · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}</span>
-              <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">stały format 1:1</span>
+              <span>
+                Strony książki ({currentFormat.name}) · {isToc ? "Spis treści" : `Rozdział ${chapterNumber}`} · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}
+              </span>
+              <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">
+                strony {startPageNumber}–{startPageNumber + bookPages.length - 1} w książce
+              </span>
             </div>
             {/* Real eBook Page Viewport with Fixed-Height Sheets */}
             <div className="flex h-full w-full min-h-0 flex-col items-center overflow-y-auto rounded-2xl border border-[#1d241d]/15 bg-[#ded7c8]/50 p-4 sm:p-8 shadow-inner space-y-8">
@@ -619,11 +636,19 @@ export function ChapterEditor({
                   }}
                   className="book-page chapter-page shrink-0 bg-white p-10 sm:p-14 shadow-2xl transition flex flex-col justify-between overflow-hidden"
                 >
-                  {/* Header running title */}
+                  {/* Header running title (Żywa pagina) */}
                   <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.75rem] text-[#66705f] shrink-0">
-                    <span className="font-serif italic truncate max-w-[200px]">{bookTitle || "Książka"}</span>
-                    <span className="font-sans uppercase tracking-wider text-[0.7rem] text-[#b15636] font-semibold">
-                      {pageIndex === 0 ? "Rozdział" : `Rozdział (cd.)`}
+                    <span className="font-serif italic truncate max-w-[220px]" title={bookTitle}>
+                      {bookTitle || "Książka"}
+                    </span>
+                    <span className="font-sans uppercase tracking-wider text-[0.7rem] text-[#b15636] font-semibold truncate max-w-[240px]">
+                      {isToc
+                        ? pageIndex === 0
+                          ? "Spis treści"
+                          : "Spis treści (cd.)"
+                        : pageIndex === 0
+                        ? `Rozdział ${chapterNumber}: ${title.trim() || "Bez tytułu"}`
+                        : `${title.trim() || "Rozdział"} (cd.)`}
                     </span>
                   </div>
 
@@ -638,7 +663,13 @@ export function ChapterEditor({
                       </div>
                     )}
 
-                    <article className="markdown-preview leading-relaxed text-[#222822]">
+                    <article
+                      className="markdown-preview leading-relaxed text-[#222822]"
+                      style={{
+                        fontSize: `${currentFormat.fontSizePt}pt`,
+                        lineHeight: currentFormat.lineHeight,
+                      }}
+                    >
                       {pageText.trim() ? (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{pageText}</ReactMarkdown>
                       ) : (
@@ -649,9 +680,17 @@ export function ChapterEditor({
                     </article>
                   </div>
 
-                  {/* Page Footer */}
-                  <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-serif text-[#8c9785] shrink-0">
-                    — {pageIndex + 1} z {bookPages.length} —
+                  {/* Page Footer (Numeracja stron w książce) */}
+                  <div className="flex items-center justify-between border-t border-[#1d241d]/10 pt-3 text-xs font-serif text-[#66705f] shrink-0">
+                    <span className="text-[11px] text-[#8c9785]">
+                      Strona {pageIndex + 1} z {bookPages.length}
+                    </span>
+                    <span className="font-semibold text-[#1d241d]">
+                      — {startPageNumber + pageIndex} —
+                    </span>
+                    <span className="text-[11px] text-[#8c9785]">
+                      {currentFormat.name} · {currentFormat.fontSizePt}pt
+                    </span>
                   </div>
                 </div>
               ))}
