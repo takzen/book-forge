@@ -297,16 +297,10 @@ export function BookSidebar({
                 href={`/books/${bookId}?chapter=${chapter.id}`}
                 className="flex min-w-0 flex-1 items-center gap-2.5 py-0.5"
               >
-                {isToc ? (
-                  <span className={`text-xs ${isActive ? "text-[#f8f1dd]" : "text-[#b15636]"}`}>
-                    📑
-                  </span>
-                ) : (
-                  <span className={`text-xs ${isActive ? "text-[#f8f1dd]/70" : "text-[#8c9785]"}`}>
-                    {String(regIdx + 1).padStart(2, "0")}
-                  </span>
-                )}
-                <span className="truncate">{chapter.title || "Untitled Chapter"}</span>
+                <span className={`text-xs ${isActive ? "text-[#f8f1dd]" : isToc ? "text-[#b15636]" : "text-[#8c9785]"}`}>
+                  {isToc ? "📑" : "📄"}
+                </span>
+                <span className="truncate">{chapter.title || "Bez tytułu"}</span>
                 {isToc && (
                   <span className={`ml-auto mr-2 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${
                     isActive ? "bg-white/20 text-[#f8f1dd]" : "bg-[#e5d2bd] text-[#52604e]"

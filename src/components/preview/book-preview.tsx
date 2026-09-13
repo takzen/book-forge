@@ -397,13 +397,10 @@ export function BookPreview({
                         className="group flex items-baseline justify-between border-b border-dotted border-[#1d241d]/20 pb-1 text-[#1d241d] transition hover:text-[#b15636]"
                       >
                         <span className="font-serif font-semibold">
-                          <span className="mr-3 font-sans text-xs text-[#b15636]">
-                            {String(globalIdx + 1).padStart(2, "0")}
-                          </span>
-                          {chapter.title || "Untitled Chapter"}
+                          {chapter.title || "Bez tytułu"}
                         </span>
                         <span className="font-mono text-xs text-[#66705f]">
-                          {words} words
+                          {words} słów
                         </span>
                       </a>
                     );
@@ -429,7 +426,7 @@ export function BookPreview({
               ? "font-mono"
               : "font-sans";
 
-          return regularChapters.map((chapter, index) => {
+          return regularChapters.map((chapter) => {
             return (
               <section
                 key={chapter.id}
@@ -444,15 +441,12 @@ export function BookPreview({
                 {/* Header running title */}
                 <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.7rem] text-[#66705f]">
                   <span className="font-serif italic">{bookTitle}</span>
-                  <span className="font-sans uppercase tracking-wider">Chapter {index + 1}</span>
+                  <span className="font-sans uppercase tracking-wider text-[#b15636] font-semibold">{chapter.title}</span>
                 </div>
 
                 {/* Chapter Content Body */}
                 <div className="flex-1 py-8">
                   <div className="mb-8">
-                    <p className="text-xs font-bold tracking-[0.2em] text-[#b15636] uppercase">
-                      Chapter {index + 1}
-                    </p>
                     <h2 className="mt-1 font-serif text-3xl font-bold tracking-tight text-[#1d241d]">
                       {chapter.title}
                     </h2>
