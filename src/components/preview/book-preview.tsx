@@ -49,6 +49,11 @@ export function BookPreview({
     return sum + (words?.length ?? 0);
   }, 0);
 
+  const isTocItemGlobal = (ch: ChapterItem) =>
+    ch.type === "toc" ||
+    ch.title.toLowerCase().includes("spis treści") ||
+    ch.title.toLowerCase().includes("table of contents");
+
   // Trigger browser print
   function handlePrint() {
     window.print();
@@ -216,11 +221,9 @@ export function BookPreview({
               margin: 0 !important;
               box-shadow: none !important;
               border: none !important;
-              page-break-after: always;
-              break-after: page;
-              width: 100% !important;
-              min-height: 100vh !important;
-              height: 100vh !important;
+            }
+            .chapter-page {
+              break-before: page;
             }
           }
         ` }} />
@@ -278,15 +281,30 @@ export function BookPreview({
           </div>
         </section>
 
+        {/* 2.5 COPYRIGHT / IMPRINT PAGE */}
+        <section
+          style={{
+            width: `${currentFormat.widthMm * 3.78}px`,
+            minHeight: `${currentFormat.heightMm * 3.78}px`,
+          }}
+          className="book-page flex flex-col justify-end bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
+        >
+          <div className="text-xs text-[#66705f] space-y-2">
+            <p className="font-semibold text-[#1d241d]">{bookTitle}</p>
+            <p>© {new Date().getFullYear()} {bookAuthor || "Autor"}</p>
+            <p>Wydanie pierwsze</p>
+            <p>Skład cyfrowy: Book Forge</p>
+            <p className="pt-2 border-t border-[#1d241d]/10 mt-4">
+              {totalWords.toLocaleString()} słów · {chapters.filter(ch => !isTocItemGlobal(ch)).length} rozdziałów
+            </p>
+            <p className="italic">Wszelkie prawa zastrzeżone.</p>
+          </div>
+        </section>
+
         {/* 3. TABLE OF CONTENTS (MULTI-PAGE SPIS TREŚCI) */}
         {(() => {
-          const isTocItem = (ch: ChapterItem) =>
-            ch.type === "toc" ||
-            ch.title.toLowerCase().includes("spis treści") ||
-            ch.title.toLowerCase().includes("table of contents");
-
-          const tocChapters = chapters.filter(isTocItem);
-          const regularChapters = chapters.filter((ch) => !isTocItem(ch));
+          const tocChapters = chapters.filter(isTocItemGlobal);
+          const regularChapters = chapters.filter((ch) => !isTocItemGlobal(ch));
 
           const tocItemsPerPage = bookFormat === "a4" ? 20 : bookFormat === "six-by-nine" ? 16 : 14;
           const autoTocPages: ChapterItem[][] = [];
@@ -340,10 +358,6 @@ export function BookPreview({
                       </ReactMarkdown>
                     </article>
                   </div>
-
-                  <footer className="border-t border-[#1d241d]/10 pt-4 text-center text-xs text-[#8c9785]">
-                    — {pageNum} —
-                  </footer>
                 </section>
               );
             });
@@ -395,10 +409,6 @@ export function BookPreview({
                     );
                   })}
                 </nav>
-
-                <footer className="border-t border-[#1d241d]/10 pt-4 text-center text-xs text-[#8c9785]">
-                  — {pageNum} —
-                </footer>
               </section>
             );
           });
@@ -406,13 +416,8 @@ export function BookPreview({
 
         {/* 4. CHAPTER PAGES */}
         {(() => {
-          const isTocItem = (ch: ChapterItem) =>
-            ch.type === "toc" ||
-            ch.title.toLowerCase().includes("spis treści") ||
-            ch.title.toLowerCase().includes("table of contents");
-
-          const tocChapters = chapters.filter(isTocItem);
-          const regularChapters = chapters.filter((ch) => !isTocItem(ch));
+          const tocChapters = chapters.filter(isTocItemGlobal);
+          const regularChapters = chapters.filter((ch) => !isTocItemGlobal(ch));
           const tocItemsPerPage = bookFormat === "a4" ? 20 : bookFormat === "six-by-nine" ? 16 : 14;
           const autoTocPagesCount = Math.max(1, Math.ceil(regularChapters.length / tocItemsPerPage));
           const totalTocPagesCount = tocChapters.length > 0 ? tocChapters.length : autoTocPagesCount;
@@ -425,8 +430,6 @@ export function BookPreview({
               : "font-sans";
 
           return regularChapters.map((chapter, index) => {
-            const pageNum = 3 + totalTocPagesCount + index;
-
             return (
               <section
                 key={chapter.id}
@@ -436,7 +439,7 @@ export function BookPreview({
                   minHeight: `${currentFormat.heightMm * 3.78}px`,
                   fontSize: `${fontSize}pt`,
                 }}
-                className="book-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
+                className="book-page chapter-page flex flex-col justify-between bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
               >
                 {/* Header running title */}
                 <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.7rem] text-[#66705f]">
@@ -466,9 +469,9 @@ export function BookPreview({
                   </article>
                 </div>
 
-                {/* Page Footer Number */}
-                <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f]">
-                  — {pageNum} —
+                {/* Page Footer */}
+                <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-serif italic text-[#66705f]">
+                  {chapter.title}
                 </div>
               </section>
             );

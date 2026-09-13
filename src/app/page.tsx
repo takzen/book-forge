@@ -20,8 +20,8 @@ const features = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f6f1e8] text-[#1d241d]">
-      <section className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6 sm:px-10 lg:px-16">
+    <main className="min-h-screen overflow-x-hidden bg-[#f6f1e8] text-[#1d241d]">
+      <section className="mx-auto flex h-screen max-w-7xl flex-col px-6 py-6 sm:px-10 lg:px-16">
         <nav className="flex items-center justify-between border-b border-[#1d241d]/15 pb-5 text-sm font-medium tracking-[0.08em] uppercase">
           <span>Book Forge</span>
           <span className="text-[#66705f]">Local writing studio</span>

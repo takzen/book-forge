@@ -23,8 +23,8 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
   const activeChapter = chapters.find((chapter) => chapter.id === query.chapter) ?? chapters[0];
 
   return (
-    <main className="min-h-screen bg-[#e9e1d3] text-[#1d241d]">
-      <div className="grid min-h-screen lg:grid-cols-[20rem_1fr]">
+    <main className="h-screen overflow-hidden bg-[#e9e1d3] text-[#1d241d]">
+      <div className="grid h-screen lg:grid-cols-[20rem_1fr] overflow-hidden">
         <BookSidebar
           bookId={bookId}
           bookTitle={book.title}
@@ -34,7 +34,7 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
           activeChapterId={activeChapter?.id}
         />
 
-        <section className="min-w-0 p-5 sm:p-8 lg:p-12">
+        <section className="h-full min-w-0 overflow-hidden p-4 sm:p-6 lg:p-8 flex flex-col">
           {activeChapter ? (
             <ChapterEditor
               key={activeChapter.id}
@@ -43,6 +43,8 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
               initialTitle={activeChapter.title}
               initialContent={activeChapter.content}
               chapterType={activeChapter.type}
+              bookTitle={book.title}
+              bookFormat={book.format}
               saved={query.saved === "1"}
               hasError={Boolean(query.error)}
             />

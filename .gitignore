@@ -45,6 +45,7 @@ next-env.d.ts
 /data/books/
 /data/exports/
 /data/uploads/
+/data/*.txt
 
 # Local agent & planning files
 PLAN.md

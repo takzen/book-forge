@@ -37,41 +37,70 @@ export default async function BookPrintPage({ params, searchParams }: PrintPageP
   }, 0);
 
   return (
-    <div className={`bg-white text-[#1d241d] ${fontClass}`}>
+    <div className={`bg-white text-[#1d241d] ${fontClass}`} style={{ fontSize: `${size}pt` }}>
       <style dangerouslySetInnerHTML={{ __html: `
         @page {
           size: ${formatSpec.sizeName};
+          margin: 22mm 20mm 18mm 20mm;
+          @bottom-center {
+            content: '— ' counter(page) ' —';
+            font-size: 9pt;
+            color: #8c9785;
+            font-family: ui-monospace, monospace;
+          }
+        }
+        @page :first {
           margin: 0;
+          @bottom-center { content: none; }
         }
         body {
           background: #ffffff !important;
           margin: 0 !important;
           padding: 0 !important;
         }
-        .page {
+        .cover-page {
           width: ${formatSpec.width};
           height: ${formatSpec.height};
-          min-height: ${formatSpec.height};
-          max-height: ${formatSpec.height};
-          page-break-after: always;
-          break-after: page;
-          position: relative;
-          overflow: hidden;
+          padding: 0;
+          background: #f7f3eb;
           display: flex;
           flex-direction: column;
-          justify-content: space-between;
-          padding: 22mm 20mm 18mm 20mm;
-          background: #ffffff;
-          box-sizing: border-box;
+          page-break-after: always;
+          break-after: page;
         }
-        .cover-page {
-          padding: 0 !important;
-          background: #f7f3eb;
+        .front-matter-page {
+          break-before: page;
+          page-break-before: always;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+        }
+        .chapter-content {
+          break-before: page;
+          page-break-before: always;
+          padding-top: 2rem;
+        }
+        .toc-page {
+          break-before: page;
+          page-break-before: always;
+          padding-top: 2rem;
+        }
+        .prose p {
+          margin-bottom: 1em;
+          text-align: justify;
+        }
+        .prose h1, .prose h2, .prose h3 {
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+          page-break-after: avoid;
+          break-after: avoid;
         }
       ` }} />
 
       {/* 1. COVER PAGE */}
-      <section className="page cover-page">
+      <section className="cover-page">
         {book.coverImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -81,178 +110,61 @@ export default async function BookPrintPage({ params, searchParams }: PrintPageP
           />
         ) : (
           <div className="flex h-full flex-col justify-between border-[12px] border-[#b15636] p-16 text-center">
-            <p className="font-sans text-xs font-bold tracking-[0.25em] text-[#b15636] uppercase">BOOK FORGE EDITION</p>
+            <p className="font-sans text-xs font-bold tracking-[0.25em] text-[#b15636] uppercase">EDYCJA BOOK FORGE</p>
             <div>
               <h1 className="font-serif text-5xl font-bold tracking-tight text-[#1d241d]">{book.title}</h1>
-              <p className="mt-4 text-xl text-[#52604e]">A Work in Progress</p>
+              <p className="mt-4 text-xl text-[#52604e]">Rękopis</p>
             </div>
             <div>
-              <p className="font-serif text-lg italic text-[#1d241d]">{book.author || "Anonymous Author"}</p>
-              <p className="mt-2 text-xs uppercase tracking-widest text-[#8c9785]">{book.format.toUpperCase()} · MANUSCRIPT</p>
+              <p className="font-serif text-lg italic text-[#1d241d]">{book.author || "Anonimowy Autor"}</p>
+              <p className="mt-2 text-xs uppercase tracking-widest text-[#8c9785]">{book.format.toUpperCase()} · MANUSKRYPT</p>
             </div>
           </div>
         )}
       </section>
 
-      {/* 2. HALF-TITLE & TITLE PAGE */}
-      <section className="page text-center">
-        <div />
-        <div>
-          <h1 className="font-serif text-4xl font-bold tracking-tight text-[#1d241d]">{book.title}</h1>
-          <div className="mx-auto my-6 h-[1px] w-16 bg-[#b15636]" />
-          <p className="font-serif text-xl italic text-[#52604e]">{book.author || "Anonymous Author"}</p>
-        </div>
-        <div className="border-t border-[#1d241d]/15 pt-6 text-xs text-[#66705f]">
-          <p className="font-semibold text-[#1d241d]">{book.title}</p>
-          <p className="mt-1">First Edition · {new Date().getFullYear()}</p>
-          <p className="mt-0.5">Typeset locally with Book Forge · {totalWords.toLocaleString()} words · {chapters.length} chapters</p>
+      {/* 2. TITLE PAGE */}
+      <section className="front-matter-page text-center">
+        <h1 className="text-4xl font-bold tracking-tight">{book.title}</h1>
+        <p className="mt-6 text-xl text-[#52604e]">{book.author || "Anonimowy Autor"}</p>
+      </section>
+
+      {/* 3. COPYRIGHT / IMPRINT PAGE */}
+      <section className="front-matter-page text-center text-sm text-[#52604e] flex flex-col justify-end pb-20">
+        <div className="max-w-xs mx-auto space-y-4">
+          <p className="font-semibold text-base text-[#1d241d]">{book.title}</p>
+          <p>© {new Date().getFullYear()} {book.author || "Anonimowy Autor"}</p>
+          <p>Wszelkie prawa zastrzeżone</p>
+          <div className="h-px w-12 bg-[#8c9785] mx-auto my-6"></div>
+          <p>Wydanie pierwsze · {new Date().getFullYear()}</p>
+          <p>Liczba słów: {totalWords.toLocaleString('pl-PL')}</p>
+          <p>Liczba rozdziałów: {chapters.length}</p>
+          <p className="mt-8 font-mono text-xs uppercase tracking-widest text-[#8c9785]">Skład cyfrowy: Book Forge</p>
         </div>
       </section>
 
-      {/* 3. TABLE OF CONTENTS (MULTI-PAGE SPIS TREŚCI) */}
-      {(() => {
-        const isTocItem = (ch: (typeof chapters)[number]) =>
-          ch.type === "toc" ||
-          ch.title.toLowerCase().includes("spis treści") ||
-          ch.title.toLowerCase().includes("table of contents");
+      {/* 4. TABLE OF CONTENTS */}
+      <section className="toc-page">
+        <h2 className="mb-8 text-3xl font-bold">Spis treści</h2>
+        <ul className="space-y-3">
+          {chapters.map((ch, idx) => (
+            <li key={ch.id} className="flex justify-between items-end">
+              <span className="font-medium pr-4">{ch.title || `Rozdział ${idx + 1}`}</span>
+              <div className="flex-1 border-b border-dotted border-[#8c9785] opacity-50 mb-1"></div>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-        const tocChapters = chapters.filter(isTocItem);
-        const regularChapters = chapters.filter((ch) => !isTocItem(ch));
-
-        const tocItemsPerPage = book.format === "a4" ? 20 : book.format === "six-by-nine" ? 16 : 14;
-        const autoTocPages: (typeof chapters)[] = [];
-        for (let i = 0; i < regularChapters.length; i += tocItemsPerPage) {
-          autoTocPages.push(regularChapters.slice(i, i + tocItemsPerPage));
-        }
-        if (autoTocPages.length === 0) {
-          autoTocPages.push([]);
-        }
-
-        if (tocChapters.length > 0) {
-          return tocChapters.map((tocCh, pageIdx) => {
-            const isFirstPage = pageIdx === 0;
-            const pageNum = 3 + pageIdx;
-
-            return (
-              <section key={tocCh.id} className="page">
-                <header className="border-b border-[#1d241d]/20 pb-3 text-center">
-                  <h2 className="font-serif text-2xl font-bold tracking-tight uppercase">
-                    {isFirstPage ? "Contents" : "Contents (cont.)"}
-                  </h2>
-                  <p className="mt-1 text-xs text-[#66705f]">
-                    {tocCh.title || "Spis Treści"}
-                    {tocChapters.length > 1 && ` · Strona ${pageIdx + 1} z ${tocChapters.length}`}
-                  </p>
-                </header>
-
-                <div className="my-5 flex-1">
-                  <article className={`markdown-preview ${fontClass} leading-relaxed text-[#222822]`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {tocCh.content}
-                    </ReactMarkdown>
-                  </article>
-                </div>
-
-                <footer className="border-t border-[#1d241d]/15 pt-3 text-center text-xs text-[#8c9785]">
-                  — {pageNum} —
-                </footer>
-              </section>
-            );
-          });
-        }
-
-        return autoTocPages.map((pageChapters, pageIdx) => {
-          const isFirstPage = pageIdx === 0;
-          const pageNum = 3 + pageIdx;
-
-          return (
-            <section key={`auto-toc-page-${pageIdx}`} className="page">
-              <header className="border-b border-[#1d241d]/20 pb-3 text-center">
-                <h2 className="font-serif text-2xl font-bold tracking-tight uppercase">
-                  {isFirstPage ? "Contents" : "Contents (cont.)"}
-                </h2>
-                <p className="mt-1 text-xs text-[#66705f]">
-                  {isFirstPage ? "Spis Treści" : "Spis Treści (cd.)"}
-                  {autoTocPages.length > 1 && ` · Strona ${pageIdx + 1} z ${autoTocPages.length}`}
-                </p>
-              </header>
-
-              <nav className="my-5 flex-1 space-y-2.5">
-                {pageChapters.map((chapter, itemIdx) => {
-                  const globalIdx = pageIdx * tocItemsPerPage + itemIdx;
-                  return (
-                    <div
-                      key={chapter.id}
-                      className="flex items-baseline justify-between border-b border-dotted border-[#1d241d]/25 pb-1 text-sm text-[#1d241d]"
-                    >
-                      <span className="font-serif font-semibold">
-                        <span className="mr-3 font-sans text-xs text-[#b15636]">
-                          {String(globalIdx + 1).padStart(2, "0")}
-                        </span>
-                        {chapter.title || "Untitled Chapter"}
-                      </span>
-                      <span className="font-mono text-xs text-[#66705f]">Ch. {globalIdx + 1}</span>
-                    </div>
-                  );
-                })}
-              </nav>
-
-              <footer className="border-t border-[#1d241d]/15 pt-3 text-center text-xs text-[#8c9785]">
-                — {pageNum} —
-              </footer>
-            </section>
-          );
-        });
-      })()}
-
-      {/* 4. CHAPTER PAGES */}
-      {(() => {
-        const isTocItem = (ch: (typeof chapters)[number]) =>
-          ch.type === "toc" ||
-          ch.title.toLowerCase().includes("spis treści") ||
-          ch.title.toLowerCase().includes("table of contents");
-
-        const tocChapters = chapters.filter(isTocItem);
-        const regularChapters = chapters.filter((ch) => !isTocItem(ch));
-        const tocItemsPerPage = book.format === "a4" ? 20 : book.format === "six-by-nine" ? 16 : 14;
-        const autoTocPagesCount = Math.max(1, Math.ceil(regularChapters.length / tocItemsPerPage));
-        const totalTocPagesCount = tocChapters.length > 0 ? tocChapters.length : autoTocPagesCount;
-
-        return regularChapters.map((chapter, idx) => {
-          const pageNum = 3 + totalTocPagesCount + idx;
-
-          return (
-            <section
-              key={chapter.id}
-              className="page"
-              style={{ fontSize: `${size}pt` }}
-            >
-              <div className="flex items-center justify-between border-b border-[#1d241d]/15 pb-2 text-[0.75rem] text-[#66705f]">
-                <span className="font-serif italic">{book.title}</span>
-                <span className="font-sans uppercase tracking-wider">Chapter {idx + 1}</span>
-              </div>
-
-              <div className="flex-1 py-6">
-                <div className="mb-6">
-                  <p className="text-xs font-bold tracking-[0.2em] text-[#b15636] uppercase">Chapter {idx + 1}</p>
-                  <h2 className="mt-1 font-serif text-3xl font-bold tracking-tight text-[#1d241d]">{chapter.title}</h2>
-                  <div className="mt-3 h-[1px] w-12 bg-[#b15636]" />
-                </div>
-
-                <article className={`markdown-preview ${fontClass} leading-relaxed text-[#222822]`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {chapter.content}
-                  </ReactMarkdown>
-                </article>
-              </div>
-
-              <div className="border-t border-[#1d241d]/15 pt-2 text-center text-xs font-mono text-[#66705f]">
-                — {pageNum} —
-              </div>
-            </section>
-          );
-        });
-      })()}
+      {/* 5. CHAPTERS */}
+      {chapters.map((chapter) => (
+        <section key={chapter.id} className="chapter-content prose max-w-none">
+          <h2 className="text-3xl font-bold mb-6">{chapter.title}</h2>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {chapter.content}
+          </ReactMarkdown>
+        </section>
+      ))}
     </div>
   );
 }

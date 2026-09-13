@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,6 +19,8 @@ type ChapterEditorProps = {
   initialTitle: string;
   initialContent: string;
   chapterType?: string;
+  bookTitle?: string;
+  bookFormat?: string;
   saved?: boolean;
   hasError?: boolean;
 };
@@ -25,12 +28,20 @@ type ChapterEditorProps = {
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 type ViewMode = "split" | "editor" | "preview";
 
+const formatDimensions: Record<string, { name: string; widthMm: number; heightMm: number }> = {
+  a5: { name: "A5", widthMm: 148, heightMm: 210 },
+  "six-by-nine": { name: "6 × 9 in", widthMm: 152.4, heightMm: 228.6 },
+  a4: { name: "A4", widthMm: 210, heightMm: 297 },
+};
+
 export function ChapterEditor({
   bookId,
   chapterId,
   initialTitle,
   initialContent,
   chapterType = "chapter",
+  bookTitle = "",
+  bookFormat = "a5",
   saved = false,
   hasError = false,
 }: ChapterEditorProps) {
@@ -45,6 +56,7 @@ export function ChapterEditor({
   const [uploadError, setUploadError] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const isTocChapter = chapterType === "toc";
+  const currentFormat = formatDimensions[bookFormat] || formatDimensions.a5;
 
   // Keep track of values for timer cleanup
   const currentValuesRef = useRef({ title, content });
@@ -54,6 +66,43 @@ export function ChapterEditor({
   const wordCount = (content.trim().match(/\S+/g) || []).length;
   const charCount = content.length;
   const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
+
+  // Split content into fixed-size book pages
+  const bookPages = useMemo(() => {
+    if (!content.trim()) {
+      return [""];
+    }
+
+    const wordsPerPage = bookFormat === "a4" ? 450 : bookFormat === "six-by-nine" ? 280 : 240;
+    const firstPageWords = Math.floor(wordsPerPage * 0.75); // Reserve space for title & header
+    
+    const paragraphs = content.split(/\n\n+/);
+    const pages: string[] = [];
+    let currentParagraphs: string[] = [];
+    let currentWordCount = 0;
+    let isFirstPage = true;
+
+    for (const para of paragraphs) {
+      const paraWords = (para.trim().match(/\S+/g) || []).length;
+      const limit = isFirstPage ? firstPageWords : wordsPerPage;
+
+      if (currentParagraphs.length > 0 && currentWordCount + paraWords > limit) {
+        pages.push(currentParagraphs.join("\n\n"));
+        currentParagraphs = [para];
+        currentWordCount = paraWords;
+        isFirstPage = false;
+      } else {
+        currentParagraphs.push(para);
+        currentWordCount += paraWords;
+      }
+    }
+
+    if (currentParagraphs.length > 0) {
+      pages.push(currentParagraphs.join("\n\n"));
+    }
+
+    return pages.length > 0 ? pages : [""];
+  }, [content, bookFormat]);
 
   // Perform save
   const performSave = useCallback(
@@ -261,7 +310,7 @@ export function ChapterEditor({
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="flex flex-col h-full min-h-0 w-full">
       {/* Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1d241d]/15 pb-4">
         <div>
@@ -531,22 +580,22 @@ export function ChapterEditor({
       )}
 
       {/* Editor & Preview Panes */}
-      <div className="mt-4 grid gap-5 xl:grid-cols-2">
+      <div className="mt-4 flex-1 min-h-0 grid gap-6 xl:grid-cols-2">
         {/* Editor Pane */}
         {(viewMode === "split" || viewMode === "editor") && (
-          <div className={`min-w-0 ${viewMode === "editor" ? "xl:col-span-2" : ""}`}>
-            <span className="mb-2 flex items-center justify-between gap-3 text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
-              <span>Markdown Source</span>
-              <span className="normal-case tracking-normal">Autosaving enabled</span>
-            </span>
+          <div className={`flex h-full min-h-0 flex-col ${viewMode === "editor" ? "xl:col-span-2" : ""}`}>
+            <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
+              <span>Edytor tekstu</span>
+              <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">autozapis aktywny</span>
+            </div>
             <textarea
               ref={textareaRef}
               name="content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Write your chapter in Markdown here..."
-              className="min-h-[62vh] w-full resize-y rounded-2xl border border-[#1d241d]/15 bg-[#fdfaf3] p-5 font-mono text-sm leading-relaxed text-[#2a332a] outline-none transition focus:border-[#b15636] focus:ring-4 focus:ring-[#b15636]/10"
+              placeholder="Wpisz treść rozdziału..."
+              className="h-full w-full resize-none overflow-y-auto rounded-2xl border border-[#1d241d]/15 bg-[#fdfaf3] p-6 font-mono text-sm leading-relaxed text-[#2a332a] outline-none transition focus:border-[#b15636] focus:ring-4 focus:ring-[#b15636]/10"
               spellCheck
             />
           </div>
@@ -554,17 +603,59 @@ export function ChapterEditor({
 
         {/* Live Preview Pane */}
         {(viewMode === "split" || viewMode === "preview") && (
-          <div className={`min-w-0 ${viewMode === "preview" ? "xl:col-span-2" : ""}`}>
-            <span className="mb-2 block text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
-              Live Formatted Preview
-            </span>
-            <article className="markdown-preview min-h-[62vh] rounded-2xl border border-[#1d241d]/15 bg-[#fdfaf3] p-6 sm:p-8">
-              {content.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-              ) : (
-                <p className="text-[#66705f]">Your formatted chapter will appear here as you write.</p>
-              )}
-            </article>
+          <div className={`flex h-full min-h-0 flex-col ${viewMode === "preview" ? "xl:col-span-2" : ""}`}>
+            <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
+              <span>Strony książki ({currentFormat.name}) · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}</span>
+              <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">stały format 1:1</span>
+            </div>
+            {/* Real eBook Page Viewport with Fixed-Height Sheets */}
+            <div className="flex h-full w-full min-h-0 flex-col items-center overflow-y-auto rounded-2xl border border-[#1d241d]/15 bg-[#ded7c8]/50 p-4 sm:p-8 shadow-inner space-y-8">
+              {bookPages.map((pageText, pageIndex) => (
+                <div
+                  key={pageIndex}
+                  style={{
+                    width: `${currentFormat.widthMm * 3.78}px`,
+                    height: `${currentFormat.heightMm * 3.78}px`,
+                  }}
+                  className="book-page chapter-page shrink-0 bg-white p-10 sm:p-14 shadow-2xl transition flex flex-col justify-between overflow-hidden"
+                >
+                  {/* Header running title */}
+                  <div className="flex items-center justify-between border-b border-[#1d241d]/10 pb-3 text-[0.75rem] text-[#66705f] shrink-0">
+                    <span className="font-serif italic truncate max-w-[200px]">{bookTitle || "Książka"}</span>
+                    <span className="font-sans uppercase tracking-wider text-[0.7rem] text-[#b15636] font-semibold">
+                      {pageIndex === 0 ? "Rozdział" : `Rozdział (cd.)`}
+                    </span>
+                  </div>
+
+                  {/* Chapter Content Body */}
+                  <div className="flex-1 min-h-0 py-6 overflow-hidden">
+                    {pageIndex === 0 && (
+                      <div className="mb-6 shrink-0">
+                        <h2 className="font-serif text-3xl font-bold tracking-tight text-[#1d241d]">
+                          {title || "Bez tytułu"}
+                        </h2>
+                        <div className="mt-4 h-[1px] w-12 bg-[#b15636]" />
+                      </div>
+                    )}
+
+                    <article className="markdown-preview leading-relaxed text-[#222822]">
+                      {pageText.trim() ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{pageText}</ReactMarkdown>
+                      ) : (
+                        <p className="font-sans text-sm italic text-[#8c9785]">
+                          Prawa strona od razu pokazuje sformatowany tekst tak, jak widzi go czytelnik w gotowej książce.
+                        </p>
+                      )}
+                    </article>
+                  </div>
+
+                  {/* Page Footer */}
+                  <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-serif text-[#8c9785] shrink-0">
+                    — {pageIndex + 1} z {bookPages.length} —
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
