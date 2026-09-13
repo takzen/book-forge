@@ -36,7 +36,7 @@ export default async function BookWorkspacePage({ params, searchParams }: BookPa
 
   // Calculate start page number based on preceding chapters
   const wordsPerPage = book.format === "a4" ? 450 : book.format === "six-by-nine" ? 280 : 240;
-  let startPageNumber = 4; // Cover(1), Title(2), Copyright(3)
+  let startPageNumber = 1;
   for (let i = 0; i < activeChapterIndex; i++) {
     const chWords = (chapters[i].content.trim().match(/\S+/g) || []).length;
     const pagesCount = Math.max(1, Math.ceil(chWords / wordsPerPage));

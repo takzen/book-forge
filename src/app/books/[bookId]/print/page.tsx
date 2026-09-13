@@ -43,7 +43,7 @@ export default async function BookPrintPage({ params, searchParams }: PrintPageP
           size: ${formatSpec.sizeName};
           margin: 22mm 20mm 18mm 20mm;
           @bottom-center {
-            content: '— ' counter(page) ' —';
+            content: counter(page);
             font-size: 9pt;
             color: #8c9785;
             font-family: ui-monospace, monospace;
@@ -127,20 +127,6 @@ export default async function BookPrintPage({ params, searchParams }: PrintPageP
       <section className="front-matter-page text-center">
         <h1 className="text-4xl font-bold tracking-tight">{book.title}</h1>
         <p className="mt-6 text-xl text-[#52604e]">{book.author || "Anonimowy Autor"}</p>
-      </section>
-
-      {/* 3. COPYRIGHT / IMPRINT PAGE */}
-      <section className="front-matter-page text-center text-sm text-[#52604e] flex flex-col justify-end pb-20">
-        <div className="max-w-xs mx-auto space-y-4">
-          <p className="font-semibold text-base text-[#1d241d]">{book.title}</p>
-          <p>© {new Date().getFullYear()} {book.author || "Anonimowy Autor"}</p>
-          <p>Wszelkie prawa zastrzeżone</p>
-          <div className="h-px w-12 bg-[#8c9785] mx-auto my-6"></div>
-          <p>Wydanie pierwsze · {new Date().getFullYear()}</p>
-          <p>Liczba słów: {totalWords.toLocaleString('pl-PL')}</p>
-          <p>Liczba rozdziałów: {chapters.length}</p>
-          <p className="mt-8 font-mono text-xs uppercase tracking-widest text-[#8c9785]">Skład cyfrowy: Book Forge</p>
-        </div>
       </section>
 
       {/* 4. TABLE OF CONTENTS */}

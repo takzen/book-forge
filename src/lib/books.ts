@@ -198,13 +198,13 @@ export function generateTocMarkdown(
   const pageItems = regularChapters.slice(startIndex, startIndex + itemsPerPage);
 
   if (pageItems.length === 0 && pageNumber > 1) {
-    return `### Spis treści (cd. — strona ${pageNumber})\n\n*(Kolejne rozdziały lub brak kolejnych pozycji na tej stronie)*\n`;
+    return `### Spis treści (cd.)\n\n*(Kolejne rozdziały lub brak kolejnych pozycji na tej stronie)*\n`;
   }
 
   const titleHeader =
     pageNumber === 1
       ? "# Spis treści\n\n"
-      : `### Spis treści (cd. — strona ${pageNumber})\n\n`;
+      : `### Spis treści (cd.)\n\n`;
 
   let md = titleHeader;
   pageItems.forEach((ch, idx) => {
@@ -222,7 +222,7 @@ export function createTocChapter(bookId: string) {
   const existingTocs = existingChapters.filter((chapter) => chapter.type === "toc");
 
   const pageNumber = existingTocs.length + 1;
-  const title = pageNumber === 1 ? "Spis treści" : `Spis treści (strona ${pageNumber})`;
+  const title = "Spis treści";
   const chapterId = randomUUID();
   const tocContent = generateTocMarkdown(bookId, pageNumber);
 

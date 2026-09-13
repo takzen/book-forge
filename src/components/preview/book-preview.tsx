@@ -276,28 +276,6 @@ export function BookPreview({
 
           <div className="border-t border-[#1d241d]/10 pt-6 text-center text-xs text-[#66705f]">
             <p className="font-semibold text-[#1d241d]">{bookTitle}</p>
-            <p className="mt-1">First Edition · {new Date().getFullYear()}</p>
-            <p className="mt-0.5">Typeset locally with Book Forge · {totalWords.toLocaleString()} words</p>
-          </div>
-        </section>
-
-        {/* 2.5 COPYRIGHT / IMPRINT PAGE */}
-        <section
-          style={{
-            width: `${currentFormat.widthMm * 3.78}px`,
-            minHeight: `${currentFormat.heightMm * 3.78}px`,
-          }}
-          className="book-page flex flex-col justify-end bg-white p-12 sm:p-16 shadow-2xl print:shadow-none"
-        >
-          <div className="text-xs text-[#66705f] space-y-2">
-            <p className="font-semibold text-[#1d241d]">{bookTitle}</p>
-            <p>© {new Date().getFullYear()} {bookAuthor || "Autor"}</p>
-            <p>Wydanie pierwsze</p>
-            <p>Skład cyfrowy: Book Forge</p>
-            <p className="pt-2 border-t border-[#1d241d]/10 mt-4">
-              {totalWords.toLocaleString()} słów · {chapters.filter(ch => !isTocItemGlobal(ch)).length} rozdziałów
-            </p>
-            <p className="italic">Wszelkie prawa zastrzeżone.</p>
           </div>
         </section>
 
@@ -325,7 +303,7 @@ export function BookPreview({
           if (tocChapters.length > 0) {
             return tocChapters.map((tocCh, pageIdx) => {
               const isFirstPage = pageIdx === 0;
-              const pageNum = 3 + pageIdx;
+              const pageNum = pageIdx + 1;
 
               return (
                 <section
@@ -344,7 +322,6 @@ export function BookPreview({
                     </h2>
                     <p className="mt-1 text-xs text-[#66705f]">
                       {tocCh.title || "Spis Treści"}
-                      {tocChapters.length > 1 && ` · Strona ${pageIdx + 1} z ${tocChapters.length}`}
                     </p>
                   </header>
 
@@ -358,6 +335,11 @@ export function BookPreview({
                       </ReactMarkdown>
                     </article>
                   </div>
+
+                  {/* Page Footer */}
+                  <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f]">
+                    {pageNum}
+                  </div>
                 </section>
               );
             });
@@ -365,7 +347,7 @@ export function BookPreview({
 
           return autoTocPages.map((pageChapters, pageIdx) => {
             const isFirstPage = pageIdx === 0;
-            const pageNum = 3 + pageIdx;
+            const pageNum = pageIdx + 1;
 
             return (
               <section
@@ -382,7 +364,6 @@ export function BookPreview({
                   </h2>
                   <p className="mt-1 text-xs text-[#66705f]">
                     {isFirstPage ? "Spis Treści" : "Spis Treści (cd.)"}
-                    {autoTocPages.length > 1 && ` · Strona ${pageIdx + 1} z ${autoTocPages.length}`}
                   </p>
                 </header>
 
@@ -406,6 +387,10 @@ export function BookPreview({
                     );
                   })}
                 </nav>
+
+                <footer className="border-t border-[#1d241d]/10 pt-4 text-center text-xs font-mono text-[#66705f]">
+                  {pageNum}
+                </footer>
               </section>
             );
           });
@@ -426,7 +411,8 @@ export function BookPreview({
               ? "font-mono"
               : "font-sans";
 
-          return regularChapters.map((chapter) => {
+          return regularChapters.map((chapter, index) => {
+            const pageNum = totalTocPagesCount + index + 1;
             return (
               <section
                 key={chapter.id}
@@ -464,8 +450,8 @@ export function BookPreview({
                 </div>
 
                 {/* Page Footer */}
-                <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-serif italic text-[#66705f]">
-                  {chapter.title}
+                <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f]">
+                  {pageNum}
                 </div>
               </section>
             );

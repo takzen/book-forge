@@ -49,7 +49,7 @@ export function ChapterEditor({
   bookTitle = "",
   bookFormat = "a5",
   chapterNumber = 1,
-  startPageNumber = 4,
+  startPageNumber = 1,
   saved = false,
   hasError = false,
 }: ChapterEditorProps) {
@@ -618,12 +618,7 @@ export function ChapterEditor({
         {(viewMode === "split" || viewMode === "preview") && (
           <div className={`flex h-full min-h-0 flex-col ${viewMode === "preview" ? "xl:col-span-2" : ""}`}>
             <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold tracking-[0.16em] text-[#66705f] uppercase">
-              <span>
-                Strony książki ({currentFormat.name}) · {title.trim() || "Rozdział"} · {bookPages.length} {bookPages.length === 1 ? "strona" : "stron"}
-              </span>
-              <span className="text-[11px] font-medium lowercase tracking-normal text-[#8c9785]">
-                strony {startPageNumber}–{startPageNumber + bookPages.length - 1} w książce
-              </span>
+              <span>Podgląd</span>
             </div>
             {/* Real eBook Page Viewport with Fixed-Height Sheets */}
             <div className="flex h-full w-full min-h-0 flex-col items-center overflow-y-auto rounded-2xl border border-[#1d241d]/15 bg-[#ded7c8]/50 p-4 sm:p-8 shadow-inner space-y-8">
@@ -642,9 +637,7 @@ export function ChapterEditor({
                       {bookTitle || "Książka"}
                     </span>
                     <span className="font-sans uppercase tracking-wider text-[0.7rem] text-[#b15636] font-semibold truncate max-w-[240px]">
-                      {pageIndex === 0
-                        ? title.trim() || "Rozdział"
-                        : `${title.trim() || "Rozdział"} (cd.)`}
+                      {title.trim() || "Rozdział"}
                     </span>
                   </div>
 
@@ -676,17 +669,9 @@ export function ChapterEditor({
                     </article>
                   </div>
 
-                  {/* Page Footer (Numeracja stron w książce) */}
-                  <div className="flex items-center justify-between border-t border-[#1d241d]/10 pt-3 text-xs font-serif text-[#66705f] shrink-0">
-                    <span className="text-[11px] text-[#8c9785]">
-                      Strona {pageIndex + 1} z {bookPages.length}
-                    </span>
-                    <span className="font-semibold text-[#1d241d]">
-                      — {startPageNumber + pageIndex} —
-                    </span>
-                    <span className="text-[11px] text-[#8c9785]">
-                      {currentFormat.name} · {currentFormat.fontSizePt}pt
-                    </span>
+                  {/* Page Footer (tylko numeracja) */}
+                  <div className="border-t border-[#1d241d]/10 pt-3 text-center text-xs font-mono text-[#66705f] shrink-0">
+                    {startPageNumber + pageIndex}
                   </div>
                 </div>
               ))}

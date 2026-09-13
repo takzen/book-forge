@@ -305,7 +305,7 @@ export function BookSidebar({
                   <span className={`ml-auto mr-2 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${
                     isActive ? "bg-white/20 text-[#f8f1dd]" : "bg-[#e5d2bd] text-[#52604e]"
                   }`}>
-                    {existingTocs.length > 1 ? `TOC · Str. ${tocIdx + 1}` : "TOC"}
+                    TOC
                   </span>
                 )}
               </Link>
