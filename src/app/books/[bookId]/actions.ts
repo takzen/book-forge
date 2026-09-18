@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  type BookSettingsInput,
   createChapter,
   createTocChapter,
   generateTocMarkdown,
@@ -11,6 +12,7 @@ import {
   getBook,
   reorderChapters,
   updateBook,
+  updateBookSettings,
   updateChapter,
 } from "@/lib/books";
 
@@ -45,27 +47,6 @@ export async function refreshTocContentAction(bookId: string, chapterId?: string
 
   const content = generateTocMarkdown(bookId, chapterId);
   return { success: true, content };
-}
-
-export async function saveChapterAction(formData: FormData) {
-  const bookId = String(formData.get("bookId") ?? "");
-  const chapterId = String(formData.get("chapterId") ?? "");
-  const title = String(formData.get("title") ?? "").trim();
-  const content = String(formData.get("content") ?? "");
-
-  if (
-    !bookId ||
-    !chapterId ||
-    !title ||
-    title.length > 180 ||
-    content.length > 1_000_000
-  ) {
-    redirect(`/books/${bookId}?chapter=${chapterId}&error=invalid-content`);
-  }
-
-  updateChapter({ bookId, chapterId, title, content });
-  revalidatePath(`/books/${bookId}`);
-  redirect(`/books/${bookId}?chapter=${chapterId}&saved=1`);
 }
 
 export async function deleteChapterAction(
@@ -172,6 +153,21 @@ export async function updateBookDetailsAction({
   updateBook({ id, title: title.trim(), author: author.trim(), format });
   revalidatePath(`/books/${id}`);
   revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function updateBookSettingsAction(
+  bookId: string,
+  settings: BookSettingsInput
+) {
+  if (!bookId || !getBook(bookId)) {
+    return { success: false, error: "Invalid book ID" };
+  }
+
+  // Values are validated and clamped inside updateBookSettings.
+  updateBookSettings(bookId, settings);
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath(`/books/${bookId}/preview`);
   return { success: true };
 }
 

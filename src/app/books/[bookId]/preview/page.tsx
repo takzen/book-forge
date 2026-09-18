@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 import { BookPreview } from "@/components/preview/book-preview";
-import { getBook, listChapters } from "@/lib/books";
+import {
+  type BookFontFamily,
+  getBook,
+  getBookSettings,
+  listChapters,
+} from "@/lib/books";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,7 @@ export default async function BookPreviewPage({ params }: PreviewPageProps) {
   }
 
   const chapters = listChapters(bookId);
+  const settings = getBookSettings(bookId);
 
   return (
     <BookPreview
@@ -26,6 +32,9 @@ export default async function BookPreviewPage({ params }: PreviewPageProps) {
       bookFormat={book.format}
       coverImage={book.coverImage}
       chapters={chapters}
+      initialFontFamily={settings.fontFamily as BookFontFamily}
+      initialFontSize={settings.fontSizePt}
+      lineHeight={settings.lineHeight / 100}
     />
   );
 }

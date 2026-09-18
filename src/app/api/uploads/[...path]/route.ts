@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
+import { getBookUploadsDir } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ path: stri
   }
 
   try {
-    const file = await readFile(join(process.cwd(), "data", "uploads", bookId, filename));
+    const file = await readFile(join(getBookUploadsDir(bookId), filename));
     const extension = filename.split(".").pop()?.toLowerCase() ?? "";
     return new NextResponse(file, {
       headers: {

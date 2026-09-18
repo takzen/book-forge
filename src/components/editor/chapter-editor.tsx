@@ -11,7 +11,13 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { autosaveChapterAction, createTocChapterAction, refreshTocContentAction, saveChapterAction } from "@/app/books/[bookId]/actions";
+import {
+  autosaveChapterAction,
+  createTocChapterAction,
+  refreshTocContentAction,
+} from "@/app/books/[bookId]/actions";
+import { isTocChapter } from "@/lib/chapters";
+import { countWords, splitContentIntoPages } from "@/lib/pagination";
 
 type ChapterEditorProps = {
   bookId: string;
@@ -21,23 +27,35 @@ type ChapterEditorProps = {
   chapterType?: string;
   bookTitle?: string;
   bookFormat?: string;
-  chapterNumber?: number;
   startPageNumber?: number;
-  saved?: boolean;
+  /** Typography taken from the book's saved settings. */
+  fontFamily?: "serif" | "sans" | "mono";
+  fontSizePt?: number;
+  lineHeight?: number;
   hasError?: boolean;
 };
 
+/** What the save request itself is doing. */
+type SaveState = "idle" | "saving" | "error";
+/** What the badge shows, combining SaveState with whether the buffer is dirty. */
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 type ViewMode = "split" | "editor" | "preview";
 
-const formatDimensions: Record<
-  string,
-  { name: string; widthMm: number; heightMm: number; fontSizePt: number; lineHeight: number }
-> = {
-  a5: { name: "A5", widthMm: 148, heightMm: 210, fontSizePt: 10.5, lineHeight: 1.6 },
-  b5: { name: "B5", widthMm: 170, heightMm: 240, fontSizePt: 11, lineHeight: 1.6 },
-  "six-by-nine": { name: "6 × 9 in", widthMm: 152.4, heightMm: 228.6, fontSizePt: 11, lineHeight: 1.6 },
-  a4: { name: "A4", widthMm: 210, heightMm: 297, fontSizePt: 12, lineHeight: 1.65 },
+/**
+ * Only the formats the rest of the app knows about. A "b5" entry used to live
+ * here alone — it had no counterpart in the book format type, the page-size
+ * selector, the preview or the print layout.
+ */
+const formatDimensions: Record<string, { name: string; widthMm: number; heightMm: number }> = {
+  a5: { name: "A5", widthMm: 148, heightMm: 210 },
+  "six-by-nine": { name: "6 × 9 in", widthMm: 152.4, heightMm: 228.6 },
+  a4: { name: "A4", widthMm: 210, heightMm: 297 },
+};
+
+const FONT_CLASSES: Record<string, string> = {
+  serif: "font-book-serif",
+  sans: "font-book-sans",
+  mono: "font-book-mono",
 };
 
 export function ChapterEditor({
@@ -48,83 +66,67 @@ export function ChapterEditor({
   chapterType = "chapter",
   bookTitle = "",
   bookFormat = "a5",
-  chapterNumber = 1,
   startPageNumber = 1,
-  saved = false,
+  fontFamily = "serif",
+  fontSizePt = 11,
+  lineHeight = 1.6,
   hasError = false,
 }: ChapterEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>(
-    hasError ? "error" : saved ? "saved" : "saved"
-  );
+  const [saveState, setSaveState] = useState<SaveState>(hasError ? "error" : "idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
-  const isToc =
-    chapterType === "toc" ||
-    title.toLowerCase().includes("spis treści") ||
-    title.toLowerCase().includes("table of contents") ||
-    chapterNumber === 0;
-  const isTocChapter = isToc;
+  const isTocPage = isTocChapter({ id: chapterId, title, type: chapterType });
   const currentFormat = formatDimensions[bookFormat] || formatDimensions.a5;
-
-  // Keep track of values for timer cleanup
-  const currentValuesRef = useRef({ title, content });
-  currentValuesRef.current = { title, content };
+  const fontClass = FONT_CLASSES[fontFamily] ?? "font-book-serif";
 
   // Calculate live statistics
-  const wordCount = (content.trim().match(/\S+/g) || []).length;
+  const wordCount = countWords(content);
   const charCount = content.length;
   const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
-  // Split content into fixed-size book pages
-  const bookPages = useMemo(() => {
-    if (!content.trim()) {
-      return [""];
-    }
+  // Same estimator the running page numbers use, so the sheet the reader sees
+  // here and the number printed under it always agree.
+  const bookPages = useMemo(
+    () => splitContentIntoPages(content, bookFormat),
+    [content, bookFormat]
+  );
 
-    const wordsPerPage = bookFormat === "a4" ? 450 : bookFormat === "six-by-nine" ? 280 : 240;
-    const firstPageWords = Math.floor(wordsPerPage * 0.75); // Reserve space for title & header
-    
-    const paragraphs = content.split(/\n\n+/);
-    const pages: string[] = [];
-    let currentParagraphs: string[] = [];
-    let currentWordCount = 0;
-    let isFirstPage = true;
+  /**
+   * What the server currently holds. Keeping it as state (rather than deriving
+   * "unsaved" through an effect that called setState on every keystroke) means
+   * the dirty flag is plain derived data and React never has to re-render just
+   * to discover it.
+   */
+  const [savedSnapshot, setSavedSnapshot] = useState({
+    title: initialTitle,
+    content: initialContent,
+  });
 
-    for (const para of paragraphs) {
-      const paraWords = (para.trim().match(/\S+/g) || []).length;
-      const limit = isFirstPage ? firstPageWords : wordsPerPage;
+  const isDirty =
+    title !== savedSnapshot.title || content !== savedSnapshot.content;
 
-      if (currentParagraphs.length > 0 && currentWordCount + paraWords > limit) {
-        pages.push(currentParagraphs.join("\n\n"));
-        currentParagraphs = [para];
-        currentWordCount = paraWords;
-        isFirstPage = false;
-      } else {
-        currentParagraphs.push(para);
-        currentWordCount += paraWords;
-      }
-    }
-
-    if (currentParagraphs.length > 0) {
-      pages.push(currentParagraphs.join("\n\n"));
-    }
-
-    return pages.length > 0 ? pages : [""];
-  }, [content, bookFormat]);
+  const saveStatus: SaveStatus =
+    saveState === "saving"
+      ? "saving"
+      : saveState === "error"
+        ? "error"
+        : isDirty
+          ? "unsaved"
+          : "saved";
 
   // Perform save
   const performSave = useCallback(
     async (currentTitle: string, currentContent: string) => {
       if (!currentTitle.trim()) {
-        setSaveStatus("error");
+        setSaveState("error");
         return;
       }
-      setSaveStatus("saving");
+      setSaveState("saving");
       try {
         const result = await autosaveChapterAction({
           bookId,
@@ -134,44 +136,44 @@ export function ChapterEditor({
         });
 
         if (result.success) {
-          setSaveStatus("saved");
+          setSavedSnapshot({ title: currentTitle, content: currentContent });
+          setSaveState("idle");
           setLastSavedAt(new Date());
         } else {
-          setSaveStatus("error");
+          setSaveState("error");
         }
       } catch {
-        setSaveStatus("error");
+        setSaveState("error");
       }
     },
     [bookId, chapterId]
   );
 
-  // Debounced autosave effect
+  // Debounced autosave. The effect only schedules work; it no longer sets state
+  // synchronously on every render pass.
   useEffect(() => {
-    // If title and content match initial, don't trigger
-    if (title === initialTitle && content === initialContent && saveStatus === "saved") {
+    if (title === savedSnapshot.title && content === savedSnapshot.content) {
       return;
     }
-
-    setSaveStatus("unsaved");
 
     const timer = setTimeout(() => {
       performSave(title, content);
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [title, content, initialTitle, initialContent, performSave]);
+  }, [title, content, savedSnapshot, performSave]);
 
   // Warn on closing window if unsaved
   useEffect(() => {
+    if (!isDirty && saveState !== "saving") {
+      return;
+    }
     function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if (saveStatus === "unsaved" || saveStatus === "saving") {
-        e.preventDefault();
-      }
+      e.preventDefault();
     }
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [saveStatus]);
+  }, [isDirty, saveState]);
 
   // Format Helper: Wrap selection
   function wrapSelection(before: string, after: string, defaultText = "") {
@@ -553,7 +555,7 @@ export function ChapterEditor({
         </label>
 
         {/* Generate / Refresh / Add Table of Contents pages */}
-        {isTocChapter && (
+        {isTocPage && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -653,10 +655,10 @@ export function ChapterEditor({
                     )}
 
                     <article
-                      className="markdown-preview leading-relaxed text-[#222822]"
+                      className={`book-prose ${fontClass} text-[#222822]`}
                       style={{
-                        fontSize: `${currentFormat.fontSizePt}pt`,
-                        lineHeight: currentFormat.lineHeight,
+                        fontSize: `${fontSizePt}pt`,
+                        lineHeight,
                       }}
                     >
                       {pageText.trim() ? (
@@ -679,14 +681,6 @@ export function ChapterEditor({
           </div>
         )}
       </div>
-
-      {/* Form fallback for non-JS / standard form submissions */}
-      <form action={saveChapterAction} className="sr-only">
-        <input type="hidden" name="bookId" value={bookId} />
-        <input type="hidden" name="chapterId" value={chapterId} />
-        <input type="hidden" name="title" value={title} />
-        <input type="hidden" name="content" value={content} />
-      </form>
     </div>
   );
 }

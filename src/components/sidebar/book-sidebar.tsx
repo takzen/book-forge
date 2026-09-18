@@ -9,9 +9,12 @@ import {
   deleteChapterAction,
   reorderChaptersAction,
   updateBookDetailsAction,
+  updateBookSettingsAction,
   deleteBookFromWorkspaceAction,
   duplicateBookFromWorkspaceAction,
 } from "@/app/books/[bookId]/actions";
+import { isTocChapter } from "@/lib/chapters";
+import { countWords } from "@/lib/pagination";
 
 type ChapterItem = {
   id: string;
@@ -21,6 +24,34 @@ type ChapterItem = {
   sortOrder: number;
 };
 
+type BookTypography = {
+  fontFamily: "serif" | "sans" | "mono";
+  fontSizePt: number;
+  /** Percentage: 160 means 1.6. */
+  lineHeight: number;
+  marginTopMm: number;
+  marginBottomMm: number;
+  marginSideMm: number;
+  chapterStart: "any" | "recto" | "verso";
+};
+
+/** Reorders the server list by `orderedIds`, ignoring ids that no longer exist. */
+function applyOptimisticOrder<T extends { id: string }>(
+  items: T[],
+  orderedIds: string[] | null
+): T[] {
+  if (!orderedIds) {
+    return items;
+  }
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ordered = orderedIds
+    .map((id) => byId.get(id))
+    .filter((item): item is T => item !== undefined);
+  // Anything the server added since the drag started goes at the end.
+  const seen = new Set(orderedIds);
+  return [...ordered, ...items.filter((item) => !seen.has(item.id))];
+}
+
 type BookSidebarProps = {
   bookId: string;
   bookTitle: string;
@@ -28,6 +59,7 @@ type BookSidebarProps = {
   bookFormat: string;
   chapters: ChapterItem[];
   activeChapterId?: string;
+  settings: BookTypography;
 };
 
 export function BookSidebar({
@@ -37,9 +69,9 @@ export function BookSidebar({
   bookFormat,
   chapters: initialChapters,
   activeChapterId,
+  settings,
 }: BookSidebarProps) {
   const router = useRouter();
-  const [chapters, setChapters] = useState(initialChapters);
   const [isPending, startTransition] = useTransition();
   const [isEditingBook, setIsEditingBook] = useState(false);
   const [bookTitleVal, setBookTitleVal] = useState(bookTitle);
@@ -47,15 +79,18 @@ export function BookSidebar({
   const [bookFormatVal, setBookFormatVal] = useState(bookFormat);
   const [deletingChapterId, setDeletingChapterId] = useState<string | null>(null);
 
-  const totalWords = chapters.reduce((sum, ch) => {
-    const words = ch.content.trim().match(/\S+/g);
-    return sum + (words?.length ?? 0);
-  }, 0);
+  /**
+   * Optimistic ordering applied on top of the server's list. Storing a full
+   * copy of the chapters used to leave the sidebar showing stale titles: the
+   * sync check only fired when the chapter *count* changed, so renaming a
+   * chapter in the editor never reached this list. Only the order is local now
+   * — titles and content always come straight from the server.
+   */
+  const [optimisticOrder, setOptimisticOrder] = useState<string[] | null>(null);
 
-  // Sync if props update
-  if (initialChapters !== chapters && initialChapters.length !== chapters.length) {
-    setChapters(initialChapters);
-  }
+  const chapters = applyOptimisticOrder(initialChapters, optimisticOrder);
+
+  const totalWords = chapters.reduce((sum, ch) => sum + countWords(ch.content), 0);
 
   async function handleMoveChapter(index: number, direction: "up" | "down") {
     const targetIndex = direction === "up" ? index - 1 : index + 1;
@@ -64,11 +99,16 @@ export function BookSidebar({
     const updated = [...chapters];
     const [moved] = updated.splice(index, 1);
     updated.splice(targetIndex, 0, moved);
-    setChapters(updated);
 
     const orderedIds = updated.map((ch) => ch.id);
+    setOptimisticOrder(orderedIds);
+
     startTransition(async () => {
       await reorderChaptersAction(bookId, orderedIds);
+      // Re-render the server components so the editor's page numbers and the
+      // generated contents list pick up the new order too.
+      router.refresh();
+      setOptimisticOrder(null);
     });
   }
 
@@ -79,7 +119,15 @@ export function BookSidebar({
     setDeletingChapterId(chapterId);
     startTransition(async () => {
       await deleteChapterAction(bookId, chapterId);
+      setOptimisticOrder(null);
       setDeletingChapterId(null);
+    });
+  }
+
+  async function handleSaveTypography(next: Partial<BookTypography>) {
+    startTransition(async () => {
+      await updateBookSettingsAction(bookId, next);
+      router.refresh();
     });
   }
 
@@ -184,6 +232,110 @@ export function BookSidebar({
             </select>
           </label>
 
+          {/* Typography & page layout — drives both the preview and the PDF. */}
+          <div className="mt-4 border-t border-[#1d241d]/10 pt-3">
+            <p className="font-bold tracking-wider text-[#b15636] uppercase">Skład i typografia</p>
+
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
+              <label className="block font-semibold text-[#1d241d]">
+                Krój pisma
+                <select
+                  value={settings.fontFamily}
+                  onChange={(e) =>
+                    handleSaveTypography({
+                      fontFamily: e.target.value as BookTypography["fontFamily"],
+                    })
+                  }
+                  className="mt-1 w-full rounded-lg border border-[#1d241d]/20 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#b15636]"
+                >
+                  <option value="serif">Szeryfowy</option>
+                  <option value="sans">Bezszeryfowy</option>
+                  <option value="mono">Maszynowy</option>
+                </select>
+              </label>
+
+              <label className="block font-semibold text-[#1d241d]">
+                Stopień ({settings.fontSizePt} pt)
+                <input
+                  type="number"
+                  min={8}
+                  max={18}
+                  step={1}
+                  defaultValue={settings.fontSizePt}
+                  onBlur={(e) =>
+                    handleSaveTypography({ fontSizePt: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full rounded-lg border border-[#1d241d]/20 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#b15636]"
+                />
+              </label>
+            </div>
+
+            <label className="mt-2.5 block font-semibold text-[#1d241d]">
+              Interlinia ({(settings.lineHeight / 100).toFixed(2)})
+              <input
+                type="range"
+                min={100}
+                max={250}
+                step={5}
+                defaultValue={settings.lineHeight}
+                onMouseUp={(e) =>
+                  handleSaveTypography({
+                    lineHeight: Number((e.target as HTMLInputElement).value),
+                  })
+                }
+                onTouchEnd={(e) =>
+                  handleSaveTypography({
+                    lineHeight: Number((e.target as HTMLInputElement).value),
+                  })
+                }
+                className="mt-2 w-full accent-[#b15636]"
+              />
+            </label>
+
+            <p className="mt-3 font-semibold text-[#1d241d]">Marginesy (mm)</p>
+            <div className="mt-1 grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["marginTopMm", "Góra"],
+                  ["marginBottomMm", "Dół"],
+                  ["marginSideMm", "Boki"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="block text-[0.7rem] text-[#66705f]">
+                  {label}
+                  <input
+                    type="number"
+                    min={5}
+                    max={40}
+                    step={1}
+                    defaultValue={settings[key]}
+                    onBlur={(e) =>
+                      handleSaveTypography({ [key]: Number(e.target.value) })
+                    }
+                    className="mt-1 w-full rounded-lg border border-[#1d241d]/20 bg-white px-2 py-1.5 text-xs text-[#1d241d] outline-none focus:border-[#b15636]"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <label className="mt-2.5 block font-semibold text-[#1d241d]">
+              Początek rozdziału
+              <select
+                value={settings.chapterStart}
+                onChange={(e) =>
+                  handleSaveTypography({
+                    chapterStart: e.target.value as BookTypography["chapterStart"],
+                  })
+                }
+                className="mt-1 w-full rounded-lg border border-[#1d241d]/20 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#b15636]"
+              >
+                <option value="any">Dowolna strona</option>
+                <option value="recto">Zawsze prawa (recto)</option>
+                <option value="verso">Zawsze lewa (verso)</option>
+              </select>
+            </label>
+          </div>
+
           {/* Quick Actions (Duplicate, Export ZIP) */}
           <div className="mt-3 flex gap-2 border-t border-[#1d241d]/10 pt-3">
             <button
@@ -278,11 +430,7 @@ export function BookSidebar({
       <nav className="mt-3 flex-1 space-y-1 overflow-y-auto">
         {chapters.map((chapter, index) => {
           const isActive = chapter.id === activeChapterId;
-          const isToc = chapter.type === "toc" || chapter.title.toLowerCase().includes("spis treści") || chapter.title.toLowerCase().includes("table of contents");
-          const existingTocs = chapters.filter((c) => c.type === "toc" || c.title.toLowerCase().includes("spis treści") || c.title.toLowerCase().includes("table of contents"));
-          const regularChapters = chapters.filter((c) => !existingTocs.some((t) => t.id === c.id));
-          const tocIdx = existingTocs.findIndex((t) => t.id === chapter.id);
-          const regIdx = regularChapters.findIndex((r) => r.id === chapter.id);
+          const isToc = isTocChapter(chapter);
 
           return (
             <div

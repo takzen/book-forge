@@ -3,8 +3,11 @@
 import { useState, useTransition } from "react";
 import { importBookZipAction } from "@/app/dashboard/actions";
 
+const MAX_BYTES = 50 * 1024 * 1024;
+
 export function ImportZipCard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -16,8 +19,38 @@ export function ImportZipCard() {
       </p>
       <form
         action={(formData) => {
+          setError("");
+
+          const file = formData.get("file");
+          if (!(file instanceof File) || file.size === 0) {
+            setError("Wybierz plik .zip do zaimportowania.");
+            return;
+          }
+          if (file.size > MAX_BYTES) {
+            setError("Archiwum przekracza limit 50 MB.");
+            return;
+          }
+
           startTransition(async () => {
-            await importBookZipAction(formData);
+            try {
+              await importBookZipAction(formData);
+            } catch (err) {
+              // A redirect is signalled by throwing, so let that through; only
+              // a genuine transport failure should surface here. Without this,
+              // an upload rejected by the server failed completely silently.
+              if (
+                err &&
+                typeof err === "object" &&
+                "digest" in err &&
+                String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
+              ) {
+                throw err;
+              }
+              console.error("Import failed:", err);
+              setError(
+                "Nie udało się wysłać archiwum. Sprawdź rozmiar pliku i spróbuj ponownie."
+              );
+            }
           });
         }}
         className="mt-5 grid gap-3"
@@ -30,18 +63,30 @@ export function ImportZipCard() {
           <span className="text-[0.7rem] text-[#66705f]">
             {selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB` : "Max file size 50 MB"}
           </span>
+          {/*
+            `sr-only` rather than `hidden`: Chrome refuses to submit a form
+            containing an invalid `required` control it cannot focus, so with
+            `display: none` the submit button silently did nothing.
+          */}
           <input
             type="file"
             name="file"
             accept=".zip,application/zip"
             required
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
-              const file = e.target.files?.[0] || null;
-              setSelectedFile(file);
+              setError("");
+              setSelectedFile(e.target.files?.[0] || null);
             }}
           />
         </label>
+
+        {error && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[0.7rem] font-medium text-red-700">
+            {error}
+          </p>
+        )}
+
         <button
           type="submit"
           disabled={isPending}

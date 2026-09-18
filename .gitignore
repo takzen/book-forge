@@ -52,3 +52,6 @@ PLAN.md
 CLAUDE.md
 AGENTS.md
 
+
+# vitest scratch database
+/.vitest/

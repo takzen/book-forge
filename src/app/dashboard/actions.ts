@@ -56,7 +56,14 @@ export async function duplicateBookAction(formData: FormData) {
     redirect("/dashboard?error=invalid-book");
   }
 
-  const newId = await duplicateBook(id);
+  let newId: string;
+  try {
+    newId = await duplicateBook(id);
+  } catch (error) {
+    console.error("Duplicate error:", error);
+    redirect("/dashboard?error=duplicate-failed");
+  }
+
   revalidatePath("/dashboard");
   redirect(`/books/${newId}`);
 }
@@ -71,13 +78,18 @@ export async function importBookZipAction(formData: FormData) {
     redirect("/dashboard?error=file-too-large");
   }
 
+  // `redirect()` reports the redirect by throwing, so it has to stay outside the
+  // try block — catching it here turned every successful import into
+  // "import-failed" even though the book had already been created.
+  let newId: string;
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const newId = await importBookFromZip(buffer);
-    revalidatePath("/dashboard");
-    redirect(`/books/${newId}`);
+    newId = await importBookFromZip(buffer);
   } catch (error) {
     console.error("Import error:", error);
     redirect("/dashboard?error=import-failed");
   }
+
+  revalidatePath("/dashboard");
+  redirect(`/books/${newId}`);
 }

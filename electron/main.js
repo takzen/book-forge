@@ -87,7 +87,12 @@ function startNextServerIfNeeded() {
         },
         shell: false,
         windowsHide: true,
-        stdio: isDev ? "pipe" : "ignore",
+        // Own process group on POSIX so cleanup() can signal the whole tree;
+        // Windows uses taskkill /t for the same effect.
+        detached: process.platform !== "win32",
+        // "pipe" with no reader eventually fills the buffer and stalls the
+        // server, so inherit the console in dev and discard otherwise.
+        stdio: isDev ? "inherit" : "ignore",
       });
 
       serverProcess.on("error", (err) => {
@@ -155,9 +160,12 @@ function createMenu() {
         { role: "forceReload" },
         { role: "toggleDevTools" },
         { type: "separator" },
-        { role: "resetZoom", accelerator: "CmdOrCtrl+0" },
-        { role: "zoomIn", accelerator: "CmdOrCtrl+=" },
-        { role: "zoomOut", accelerator: "CmdOrCtrl+-" },
+        // Accelerators are deliberately omitted: the keyboard shortcuts are
+        // handled once in `before-input-event`. Declaring them here as well
+        // meant a single Ctrl+= applied several zoom steps at once.
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
         { type: "separator" },
         { role: "togglefullscreen" },
       ],
@@ -191,7 +199,9 @@ async function createWindow() {
     minHeight: 640,
     title: "Book Forge",
     icon: path.join(__dirname, process.platform === "win32" ? "icon.ico" : "icon.png"),
-    backgroundColor: "#0f172a",
+    // Matches the app's paper background, so opening the window no longer
+    // flashes dark slate before the first paint.
+    backgroundColor: "#f6f1e8",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -245,15 +255,27 @@ async function createWindow() {
 }
 
 function cleanup() {
-  if (serverProcess) {
-    try {
-      if (process.platform === "win32") {
-        spawn("taskkill", ["/pid", serverProcess.pid, "/f", "/t"]);
-      } else {
-        serverProcess.kill("SIGTERM");
-      }
-    } catch {}
-    serverProcess = null;
+  if (!serverProcess) {
+    return;
+  }
+
+  const { pid } = serverProcess;
+  serverProcess = null;
+
+  try {
+    if (process.platform === "win32") {
+      // spawn() rejects non-string arguments, so passing the numeric pid threw
+      // ERR_INVALID_ARG_TYPE straight into the catch below — the Next.js server
+      // survived every shutdown and kept holding the port.
+      spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } else {
+      process.kill(-pid, "SIGTERM");
+    }
+  } catch (error) {
+    console.error("Failed to stop the Next.js server:", error);
   }
 }
 

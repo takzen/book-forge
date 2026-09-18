@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
+import { getBookUploadsDir } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   const filename = `${randomUUID()}.${extension}`;
-  const directory = join(process.cwd(), "data", "uploads", bookId);
+  const directory = getBookUploadsDir(bookId);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, filename), Buffer.from(await image.arrayBuffer()));
 

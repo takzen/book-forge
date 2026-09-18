@@ -3,41 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { saveCoverDesignAction } from "@/app/books/[bookId]/actions";
+import { toFilenameStem } from "@/lib/filename";
+import {
+  COVER_REFERENCE_WIDTH,
+  CoverArtwork,
+  type CoverDesignState,
+  type CoverElement,
+  coverBackgroundStyle,
+  getCoverAspect,
+} from "@/components/cover/cover-artwork";
 
-export type CoverElement = {
-  id: string;
-  type: "text" | "image" | "shape";
-  content?: string; // for text or image url
-  x: number; // percentage 0-100
-  y: number; // percentage 0-100
-  width: number; // percentage 0-100
-  fontSize?: number; // pt
-  fontFamily?: "serif" | "sans" | "mono" | "display";
-  fontWeight?: "normal" | "bold";
-  fontStyle?: "normal" | "italic";
-  textTransform?: "none" | "uppercase" | "lowercase";
-  textAlign?: "left" | "center" | "right";
-  color?: string;
-  backgroundColor?: string;
-  letterSpacing?: number; // px
-  opacity?: number; // 0-1
-  borderWidth?: number; // px
-  borderColor?: string;
-  borderRadius?: number; // px
-  zIndex: number;
-};
-
-export type CoverDesignState = {
-  backgroundType: "color" | "gradient" | "image";
-  backgroundColor: string;
-  backgroundGradient: string;
-  backgroundImageUrl: string;
-  hasBorder: boolean;
-  borderColor: string;
-  borderMargin: number; // px
-  borderWidth: number; // px
-  elements: CoverElement[];
-};
+export type { CoverDesignState, CoverElement };
 
 type CoverDesignerProps = {
   bookId: string;
@@ -345,13 +321,16 @@ export function CoverDesigner({
   } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
 
-  // Aspect ratios based on book format
-  const aspectRatios: Record<string, string> = {
-    a5: "aspect-[148/210]", // 1 : 1.419
-    "six-by-nine": "aspect-[6/9]", // 1 : 1.5
-    a4: "aspect-[210/297]", // 1 : 1.414
-  };
-  const canvasAspect = aspectRatios[bookFormat] || "aspect-[148/210]";
+  const coverAspect = getCoverAspect(bookFormat);
+
+  /**
+   * The canvas is fluid up to 420px. Measuring it and scaling the artwork by
+   * `width / COVER_REFERENCE_WIDTH` is what makes the preview match the export
+   * at any window size — the export previously assumed a fixed 3.8x factor,
+   * which only held when the canvas happened to be at its full width.
+   */
+  const [canvasWidth, setCanvasWidth] = useState(COVER_REFERENCE_WIDTH);
+  const canvasScale = canvasWidth / COVER_REFERENCE_WIDTH;
 
   const selectedElement = design.elements.find((e) => e.id === selectedId);
 
@@ -377,6 +356,20 @@ export function CoverDesigner({
     },
     [bookId, design, currentCoverUrl]
   );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (width > 0) {
+        setCanvasWidth(width);
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   // Global mousemove and mouseup listeners for bulletproof dragging
   useEffect(() => {
@@ -563,8 +556,9 @@ export function CoverDesigner({
     updateSelected({ zIndex: Math.max(0, minZ - 1) });
   }
 
-  // Add new element
-  function addElement(type: "text" | "image" | "shape") {
+  // Add new element. "shape" used to be part of this union but was never
+  // offered by the UI and never rendered by either the canvas or the export.
+  function addElement(type: "text" | "image") {
     const newId = `elem-${Date.now()}`;
     const maxZ = Math.max(...design.elements.map((e) => e.zIndex), 0);
 
@@ -602,151 +596,43 @@ export function CoverDesigner({
     if (selectedId === id) setSelectedId(null);
   }
 
-  // Export to high-res PNG
+  /**
+   * Exports the cover by screenshotting the same component the canvas renders,
+   * server-side. The previous implementation redrew the design by hand on a
+   * 2D canvas and diverged from the preview in several ways at once — different
+   * font stacks, a hard-coded 3.8x type scale, no text wrapping, and no support
+   * for letter-spacing, opacity, element borders or custom gradients.
+   */
   async function exportHighResCover() {
-    if (!canvasRef.current) return;
     setIsExporting(true);
-
     try {
-      const width = 1600;
-      const height = bookFormat === "six-by-nine" ? 2400 : 2262;
+      // The render page reads the saved design, so persist first.
+      await saveDesign();
 
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Could not get canvas context");
-
-      // 1. Draw Background
-      if (design.backgroundType === "gradient" && design.backgroundGradient) {
-        const grad = ctx.createLinearGradient(0, 0, width, height);
-        if (design.backgroundColor === "#162822") {
-          grad.addColorStop(0, "#10211c");
-          grad.addColorStop(0.5, "#1e382f");
-          grad.addColorStop(1, "#10241e");
-        } else if (design.backgroundColor === "#141724") {
-          grad.addColorStop(0, "#1a1e30");
-          grad.addColorStop(1, "#0d0f17");
-        } else {
-          grad.addColorStop(0, "#284c42");
-          grad.addColorStop(1, "#12201c");
-        }
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, width, height);
-      } else {
-        ctx.fillStyle = design.backgroundColor || "#f7f3eb";
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      // Background Image if present
-      if (design.backgroundImageUrl) {
-        const bgImg = new Image();
-        bgImg.crossOrigin = "anonymous";
-        await new Promise((resolve, reject) => {
-          bgImg.onload = resolve;
-          bgImg.onerror = reject;
-          bgImg.src = design.backgroundImageUrl;
-        });
-        ctx.drawImage(bgImg, 0, 0, width, height);
-      }
-
-      // 2. Draw Outer Border Frame if enabled
-      if (design.hasBorder) {
-        ctx.strokeStyle = design.borderColor || "#b15636";
-        ctx.lineWidth = (design.borderWidth || 2) * 4;
-        const margin = (design.borderMargin || 24) * 4;
-        ctx.strokeRect(margin, margin, width - margin * 2, height - margin * 2);
-      }
-
-      // 3. Draw Elements sorted by zIndex
-      const sortedElements = [...design.elements].sort((a, b) => a.zIndex - b.zIndex);
-
-      for (const el of sortedElements) {
-        const elX = (el.x / 100) * width;
-        const elY = (el.y / 100) * height;
-        const elWidth = (el.width / 100) * width;
-
-        if (el.type === "text" && el.content) {
-          const fontPt = el.fontSize || 20;
-          const fontPx = fontPt * 3.8;
-          const family =
-            el.fontFamily === "serif"
-              ? "Georgia, serif"
-              : el.fontFamily === "mono"
-              ? "monospace"
-              : "Inter, sans-serif";
-
-          ctx.save();
-          ctx.font = `${el.fontStyle === "italic" ? "italic " : ""}${
-            el.fontWeight === "bold" ? "bold " : ""
-          }${fontPx}px ${family}`;
-          ctx.fillStyle = el.color || "#1d241d";
-          ctx.textBaseline = "top";
-
-          let textToDraw = el.content;
-          if (el.textTransform === "uppercase") textToDraw = textToDraw.toUpperCase();
-          if (el.textTransform === "lowercase") textToDraw = textToDraw.toLowerCase();
-
-          let drawX = elX;
-          if (el.textAlign === "center") {
-            ctx.textAlign = "center";
-            drawX = elX + elWidth / 2;
-          } else if (el.textAlign === "right") {
-            ctx.textAlign = "right";
-            drawX = elX + elWidth;
-          } else {
-            ctx.textAlign = "left";
-            drawX = elX;
-          }
-
-          if (el.backgroundColor) {
-            const metrics = ctx.measureText(textToDraw);
-            const padding = 24;
-            ctx.fillStyle = el.backgroundColor;
-            const pillX = el.textAlign === "center" ? drawX - metrics.width / 2 - padding : drawX - padding;
-            ctx.beginPath();
-            ctx.roundRect(pillX, elY - padding / 2, metrics.width + padding * 2, fontPx + padding, 16);
-            ctx.fill();
-            ctx.fillStyle = el.color || "#ffffff";
-          }
-
-          ctx.fillText(textToDraw, drawX, elY);
-          ctx.restore();
-        } else if (el.type === "image" && el.content) {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          await new Promise((resolve) => {
-            img.onload = resolve;
-            img.onerror = resolve;
-            img.src = el.content!;
-          });
-          const imgH = elWidth * (img.height / (img.width || 1));
-          ctx.drawImage(img, elX, elY, elWidth, imgH);
-        }
-      }
-
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 1.0));
-      if (!blob) throw new Error("Could not create PNG blob");
-
-      const formData = new FormData();
-      formData.append("bookId", bookId);
-      formData.append("image", new File([blob], "cover.png", { type: "image/png" }));
-
-      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const res = await fetch(`/api/books/${bookId}/cover?width=1600`, {
+        method: "POST",
+      });
       const data = await res.json();
 
-      if (res.ok && data.url) {
-        setCurrentCoverUrl(data.url);
-        await saveDesign(data.url);
-
-        const a = document.createElement("a");
-        a.href = data.url;
-        a.download = `${bookTitle.toLowerCase().replace(/\s+/g, "-")}-cover.png`;
-        a.click();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error ?? "Cover export failed");
       }
+
+      setCurrentCoverUrl(data.url);
+
+      const a = document.createElement("a");
+      a.href = data.url;
+      a.download = `${toFilenameStem(bookTitle)}-cover.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (error) {
       console.error("Export error:", error);
-      alert("Failed to export cover. Please check element images.");
+      alert(
+        error instanceof Error
+          ? `Nie udało się wyeksportować okładki: ${error.message}`
+          : "Nie udało się wyeksportować okładki."
+      );
     } finally {
       setIsExporting(false);
     }
@@ -900,7 +786,7 @@ export function CoverDesigner({
               {design.elements.length === 0 ? (
                 <p className="text-xs italic text-[#66705f]">No elements on cover</p>
               ) : (
-                design.elements.map((el, idx) => {
+                design.elements.map((el) => {
                   const isSelected = el.id === selectedId;
                   return (
                     <div
@@ -1043,120 +929,57 @@ export function CoverDesigner({
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget) setSelectedId(null);
               }}
-            style={{
-              backgroundColor: design.backgroundType === "color" ? design.backgroundColor : undefined,
-              backgroundImage:
-                design.backgroundType === "gradient"
-                  ? design.backgroundGradient
-                  : design.backgroundType === "image" && design.backgroundImageUrl
-                  ? `url(${design.backgroundImageUrl})`
-                  : undefined,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-            className={`relative w-full max-w-[420px] ${canvasAspect} overflow-hidden rounded-xl shadow-2xl transition-all duration-150`}
-          >
-            {/* Outer Border Frame */}
-            {design.hasBorder && (
-              <div
-                style={{
-                  borderColor: design.borderColor || "#b15636",
-                  borderWidth: `${design.borderWidth || 2}px`,
-                  inset: `${design.borderMargin || 24}px`,
-                }}
-                className="pointer-events-none absolute border"
-              />
-            )}
-
-            {/* Snap Guide Lines */}
-            {snapGuides.x.map((pos) => (
-              <div
-                key={`snap-x-${pos}`}
-                style={{ left: `${pos}%` }}
-                className="pointer-events-none absolute top-0 bottom-0 w-px border-l-2 border-dashed border-cyan-400 z-[999] opacity-90 shadow-sm"
-              />
-            ))}
-            {snapGuides.y.map((pos) => (
-              <div
-                key={`snap-y-${pos}`}
-                style={{ top: `${pos}%` }}
-                className="pointer-events-none absolute left-0 right-0 h-px border-t-2 border-dashed border-fuchsia-400 z-[999] opacity-90 shadow-sm"
-              />
-            ))}
-            {isDragging && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
-              <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1d241d]/90 px-3 py-1.5 text-[0.65rem] font-bold tracking-[0.12em] text-white shadow-lg">
-                {snapGuides.x.length > 0 && snapGuides.y.length > 0
-                  ? "CENTERED"
-                  : snapGuides.x.length > 0
-                  ? "CENTERED HORIZONTALLY"
-                  : "CENTERED VERTICALLY"}
-              </div>
-            )}
-
-            {/* Elements */}
-            {design.elements.map((el) => {
-              const isSelected = el.id === selectedId;
-              const familyClass =
-                el.fontFamily === "serif"
-                  ? "font-serif"
-                  : el.fontFamily === "mono"
-                  ? "font-mono"
-                  : "font-sans";
-
-              return (
+              style={{
+                aspectRatio: `${coverAspect.widthMm} / ${coverAspect.heightMm}`,
+                ...coverBackgroundStyle(design),
+              }}
+              className="relative w-full max-w-[420px] overflow-hidden rounded-xl shadow-2xl"
+            >
+              {/* Snap Guide Lines */}
+              {snapGuides.x.map((pos) => (
                 <div
-                  key={el.id}
-                  onMouseDown={(e) => handleElementMouseDown(e, el.id)}
-                  style={{
-                    left: `${el.x}%`,
-                    top: `${el.y}%`,
-                    width: `${el.width}%`,
-                    zIndex: el.zIndex,
-                  }}
-                  className={`absolute cursor-move group ${isDragging ? "transition-none" : "transition-shadow duration-150"} ${
-                    isSelected
-                      ? "ring-2 ring-[#b15636] ring-offset-2 shadow-lg"
-                      : "hover:outline hover:outline-2 hover:outline-[#b15636]/60"
-                  }`}
-                >
-                  {/* Selected Indicator Badges */}
-                  {isSelected && (
-                    <div className="absolute -top-5 left-0 flex items-center gap-1 rounded bg-[#b15636] px-1.5 py-0.5 text-[0.6rem] font-bold text-white shadow-xs">
-                      <span>{Math.round(el.x)}%, {Math.round(el.y)}%</span>
-                    </div>
-                  )}
-
-                  {el.type === "text" && (
-                    <p
-                      style={{
-                        fontSize: `${el.fontSize}px`,
-                        color: el.color,
-                        fontWeight: el.fontWeight,
-                        fontStyle: el.fontStyle,
-                        textTransform: el.textTransform,
-                        textAlign: el.textAlign,
-                        letterSpacing: `${el.letterSpacing}px`,
-                        backgroundColor: el.backgroundColor,
-                        borderRadius: `${el.borderRadius || 0}px`,
-                        padding: el.backgroundColor ? "4px 12px" : "0",
-                      }}
-                      className={`${familyClass} leading-tight break-words select-none`}
-                    >
-                      {el.content || "Empty Text"}
-                    </p>
-                  )}
-
-                  {el.type === "image" && el.content && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={el.content}
-                      alt="Cover element"
-                      className="pointer-events-none w-full rounded object-contain select-none"
-                    />
-                  )}
+                  key={`snap-x-${pos}`}
+                  style={{ left: `${pos}%` }}
+                  className="pointer-events-none absolute top-0 bottom-0 w-px border-l-2 border-dashed border-cyan-400 z-[999] opacity-90 shadow-sm"
+                />
+              ))}
+              {snapGuides.y.map((pos) => (
+                <div
+                  key={`snap-y-${pos}`}
+                  style={{ top: `${pos}%` }}
+                  className="pointer-events-none absolute left-0 right-0 h-px border-t-2 border-dashed border-fuchsia-400 z-[999] opacity-90 shadow-sm"
+                />
+              ))}
+              {isDragging && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
+                <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1d241d]/90 px-3 py-1.5 text-[0.65rem] font-bold tracking-[0.12em] text-white shadow-lg">
+                  {snapGuides.x.length > 0 && snapGuides.y.length > 0
+                    ? "CENTERED"
+                    : snapGuides.x.length > 0
+                    ? "CENTERED HORIZONTALLY"
+                    : "CENTERED VERTICALLY"}
                 </div>
-              );
-            })}
+              )}
+
+              {/*
+                The artwork itself is the very same component the export
+                screenshots, scaled by the canvas's measured width — so what is
+                on screen is what lands in the PNG.
+              */}
+              <CoverArtwork
+                design={design}
+                scale={canvasScale}
+                onElementMouseDown={handleElementMouseDown}
+                renderElementOverlay={(element) =>
+                  element.id === selectedId ? (
+                    <>
+                      <span className="pointer-events-none absolute inset-0 ring-2 ring-[#b15636] ring-offset-2" />
+                      <span className="pointer-events-none absolute -top-5 left-0 flex items-center gap-1 rounded bg-[#b15636] px-1.5 py-0.5 text-[0.6rem] font-bold text-white shadow-xs">
+                        {Math.round(element.x)}%, {Math.round(element.y)}%
+                      </span>
+                    </>
+                  ) : null
+                }
+              />
           </div>
         </main>
 
@@ -1224,7 +1047,11 @@ export function CoverDesigner({
                   <label className="font-semibold text-[#1d241d]">Typography Font</label>
                   <select
                     value={selectedElement.fontFamily || "serif"}
-                    onChange={(e) => updateSelected({ fontFamily: e.target.value as any })}
+                    onChange={(e) =>
+                      updateSelected({
+                        fontFamily: e.target.value as CoverElement["fontFamily"],
+                      })
+                    }
                     className="mt-1 w-full rounded-xl border border-[#1d241d]/20 bg-[#fdfaf3] p-2 text-xs outline-none focus:border-[#b15636]"
                   >
                     <option value="serif">Serif (Georgia / Classic)</option>

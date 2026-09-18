@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/*
+ * Font stacks live in Tailwind's theme so that the `font-sans` / `font-serif` /
+ * `font-mono` utilities emit them directly. Overriding the utility classes with
+ * unlayered rules (the previous approach) silently beat every other utility,
+ * because unlayered CSS always wins over `@layer utilities`.
+ */
+@theme {
+  --font-sans: var(--font-inter, ui-sans-serif), ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: Georgia, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+
+  /*
+   * Typefaces for the manuscript itself, deliberately separate from the
+   * interface font.
+   *
+   * These must be fonts installed on the machine. Chromium cannot embed a
+   * self-hosted webfont when exporting a PDF: it falls back to drawing every
+   * glyph as a Type3 vector procedure, which bloats the file (~2.7x here) and
+   * is routinely rejected by print shops. Locally installed families embed
+   * properly as CIDFontType2 subsets.
+   *
+   * Tailwind turns each `--font-*` entry into a matching utility, so these are
+   * usable as `font-book-serif` / `font-book-sans` / `font-book-mono`.
+   */
+  --font-book-serif: Georgia, "Times New Roman", Times, serif;
+  --font-book-sans: "Segoe UI", -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-book-mono: Consolas, "SFMono-Regular", "Courier New", monospace;
+}
+
 :root {
   --background: #f6f1e8;
   --foreground: #1d241d;
@@ -17,11 +49,7 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.font-serif {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-sans);
 }
 
 button {
@@ -29,34 +57,189 @@ button {
   font: inherit;
 }
 
-.markdown-preview {
-  color: #2a332a;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.05rem;
-  line-height: 1.85;
-}
+/*
+ * Rendered manuscript text. Everything is sized in `em` so a page rendered at
+ * 10.5pt and one rendered at 13pt keep the same proportions, and the whole
+ * block lives in `@layer components` so a `font-sans` / `font-mono` utility on
+ * the same element still wins.
+ */
+@layer components {
+  /*
+   * Structure only. Colour and line-height are deliberately left to inherit
+   * from the caller (the print page drives both from the book's settings), and
+   * the font family is only a default — a `font-sans` / `font-mono` utility on
+   * the same element wins, because utilities are a later cascade layer.
+   */
+  .book-prose {
+    font-family: var(--font-book-serif);
+  }
 
-.markdown-preview > :first-child {
-  margin-top: 0;
-}
+  .book-prose > :first-child {
+    margin-top: 0;
+  }
 
-.markdown-preview h1,
-.markdown-preview h2,
-.markdown-preview h3 {
-  color: #1d241d;
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.1;
-  letter-spacing: -0.035em;
-}
+  .book-prose > :last-child {
+    margin-bottom: 0;
+  }
 
-.markdown-preview h1 { font-size: 2.2rem; margin: 0 0 1.3rem; }
-.markdown-preview h2 { font-size: 1.7rem; margin: 2.1rem 0 1rem; }
-.markdown-preview h3 { font-size: 1.3rem; margin: 1.7rem 0 0.8rem; }
-.markdown-preview p { margin: 0 0 1.2rem; }
-.markdown-preview ul, .markdown-preview ol { margin: 0 0 1.2rem; padding-left: 1.5rem; }
-.markdown-preview blockquote { margin: 1.5rem 0; border-left: 3px solid #d99d67; padding-left: 1rem; color: #52604e; }
-.markdown-preview code { border-radius: 0.25rem; background: #e9e1d3; padding: 0.1rem 0.3rem; font-family: ui-monospace, monospace; font-size: 0.8em; }
-.markdown-preview pre { overflow-x: auto; border-radius: 0.75rem; background: #1d241d; padding: 1rem; color: #f8f1dd; }
-.markdown-preview pre code { background: transparent; padding: 0; }
-.markdown-preview img { display: block; width: 100%; height: auto; margin: 1.8rem 0; border-radius: 0.75rem; }
-.markdown-preview a { color: #b15636; text-decoration: underline; text-underline-offset: 0.18em; }
+  .book-prose h1,
+  .book-prose h2,
+  .book-prose h3,
+  .book-prose h4,
+  .book-prose h5,
+  .book-prose h6 {
+    font-family: inherit;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .book-prose h1 {
+    font-size: 1.9em;
+    margin: 0 0 0.7em;
+  }
+  .book-prose h2 {
+    font-size: 1.5em;
+    margin: 1.6em 0 0.6em;
+  }
+  .book-prose h3 {
+    font-size: 1.25em;
+    margin: 1.4em 0 0.5em;
+  }
+  .book-prose h4 {
+    font-size: 1.1em;
+    margin: 1.3em 0 0.5em;
+  }
+  .book-prose h5,
+  .book-prose h6 {
+    font-size: 1em;
+    margin: 1.2em 0 0.4em;
+  }
+
+  .book-prose p {
+    margin: 0 0 1em;
+    orphans: 2;
+    widows: 2;
+  }
+
+  /*
+   * Tailwind's preflight resets lists to `list-style: none; padding: 0`, so
+   * bullets and indentation have to be restored explicitly.
+   */
+  .book-prose ul,
+  .book-prose ol {
+    margin: 0 0 1em;
+    padding-left: 1.5em;
+  }
+
+  .book-prose ul {
+    list-style: disc outside;
+  }
+
+  .book-prose ol {
+    list-style: decimal outside;
+  }
+
+  .book-prose ul ul {
+    list-style: circle outside;
+  }
+
+  .book-prose li {
+    margin: 0.25em 0;
+    padding-left: 0.2em;
+  }
+
+  .book-prose li > ul,
+  .book-prose li > ol {
+    margin: 0.25em 0 0.25em;
+  }
+
+  .book-prose blockquote {
+    margin: 1.3em 0;
+    border-left: 3px solid #d99d67;
+    padding-left: 1em;
+    color: #52604e;
+    font-style: italic;
+  }
+
+  .book-prose blockquote p:last-child {
+    margin-bottom: 0;
+  }
+
+  .book-prose hr {
+    margin: 1.8em auto;
+    width: 30%;
+    border: 0;
+    border-top: 1px solid #1d241d33;
+  }
+
+  .book-prose strong {
+    font-weight: 700;
+  }
+
+  .book-prose em {
+    font-style: italic;
+  }
+
+  .book-prose code {
+    border-radius: 0.25em;
+    background: #e9e1d3;
+    padding: 0.1em 0.3em;
+    font-family: var(--font-book-mono);
+    font-size: 0.85em;
+  }
+
+  .book-prose pre {
+    overflow-x: auto;
+    margin: 1.2em 0;
+    border-radius: 0.5em;
+    background: #1d241d;
+    padding: 0.9em;
+    color: #f8f1dd;
+    font-size: 0.85em;
+    line-height: 1.5;
+  }
+
+  .book-prose pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 1em;
+  }
+
+  .book-prose img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 1.4em 0;
+    border-radius: 0.4em;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .book-prose a {
+    color: #b15636;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .book-prose table {
+    width: 100%;
+    margin: 1.2em 0;
+    border-collapse: collapse;
+    font-size: 0.92em;
+  }
+
+  .book-prose th,
+  .book-prose td {
+    border: 1px solid #1d241d26;
+    padding: 0.4em 0.6em;
+    text-align: left;
+  }
+
+  .book-prose th {
+    background: #e9e1d3;
+    font-weight: 700;
+  }
+}

@@ -1,16 +1,29 @@
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
 let database: ReturnType<typeof drizzle<typeof schema>> | undefined;
 
-function createDatabase() {
-  const dataDirectory = join(process.cwd(), "data");
-  mkdirSync(dataDirectory, { recursive: true });
+/**
+ * Location of the SQLite file. `BOOK_FORGE_DB` lets the test suite point at a
+ * throwaway database — it previously ran against the live library, creating and
+ * deleting real books (and leaving orphans behind whenever a test failed).
+ */
+export function getDatabaseFile() {
+  const override = process.env.BOOK_FORGE_DB;
+  if (override) {
+    return isAbsolute(override) ? override : join(process.cwd(), override);
+  }
+  return join(process.cwd(), "data", "book-forge.db");
+}
 
-  const sqlite = new Database(join(dataDirectory, "book-forge.db"));
+function createDatabase() {
+  const databaseFile = getDatabaseFile();
+  mkdirSync(dirname(databaseFile), { recursive: true });
+
+  const sqlite = new Database(databaseFile);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(`

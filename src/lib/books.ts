@@ -3,8 +3,15 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { and, asc, desc, eq } from "drizzle-orm";
 import JSZip from "jszip";
+import { isTocChapter, splitChapters } from "@/lib/chapters";
+import { toFilenameStem } from "@/lib/filename";
+import { countPages } from "@/lib/pagination";
 import { getDb } from "@/lib/db";
+import { getBookUploadsDir } from "@/lib/storage";
 import { bookSettings, books, chapters } from "@/lib/db/schema";
+
+/** Cover + title page, rendered ahead of the table of contents. */
+export const FRONT_MATTER_PAGES = 2;
 
 export type NewBookInput = {
   title: string;
@@ -14,15 +21,46 @@ export type NewBookInput = {
 
 export type BookFormat = "a5" | "a4" | "six-by-nine";
 
+export type BookFontFamily = "serif" | "sans" | "mono";
+
+export type ChapterStart = "any" | "recto" | "verso";
+
 export type BookSettingsInput = {
-  fontFamily?: string;
+  fontFamily?: BookFontFamily;
   fontSizePt?: number;
   lineHeight?: number;
   marginTopMm?: number;
   marginBottomMm?: number;
   marginSideMm?: number;
-  chapterStart?: "any" | "recto" | "verso";
+  chapterStart?: ChapterStart;
 };
+
+export type BookSettings = {
+  bookId: string;
+  fontFamily: string;
+  fontSizePt: number;
+  lineHeight: number;
+  marginTopMm: number;
+  marginBottomMm: number;
+  marginSideMm: number;
+  chapterStart: string;
+  updatedAt: number;
+};
+
+export const BOOK_FONT_FAMILIES: BookFontFamily[] = ["serif", "sans", "mono"];
+export const CHAPTER_STARTS: ChapterStart[] = ["any", "recto", "verso"];
+
+/** Bounds applied to every settings write, so a bad value can never reach the layout. */
+export const SETTINGS_LIMITS = {
+  fontSizePt: { min: 8, max: 18 },
+  /** Stored as a percentage: 160 means 1.6. */
+  lineHeight: { min: 100, max: 250 },
+  marginMm: { min: 5, max: 40 },
+} as const;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
 
 export function listBooks() {
   return getDb().select().from(books).orderBy(desc(books.updatedAt)).all();
@@ -110,7 +148,7 @@ export function updateBookCover({
 
 export async function deleteBook(bookId: string) {
   getDb().delete(books).where(eq(books.id, bookId)).run();
-  await rm(join(process.cwd(), "data", "uploads", bookId), {
+  await rm(getBookUploadsDir(bookId), {
     recursive: true,
     force: true,
   });
@@ -139,9 +177,38 @@ export function getBookSettings(bookId: string) {
 
 export function updateBookSettings(bookId: string, input: BookSettingsInput) {
   const now = Date.now();
+  const updates: BookSettingsInput & { updatedAt: number } = { updatedAt: now };
+
+  if (input.fontFamily && BOOK_FONT_FAMILIES.includes(input.fontFamily)) {
+    updates.fontFamily = input.fontFamily;
+  }
+  if (input.chapterStart && CHAPTER_STARTS.includes(input.chapterStart)) {
+    updates.chapterStart = input.chapterStart;
+  }
+  if (typeof input.fontSizePt === "number" && Number.isFinite(input.fontSizePt)) {
+    const { min, max } = SETTINGS_LIMITS.fontSizePt;
+    updates.fontSizePt = clamp(input.fontSizePt, min, max);
+  }
+  if (typeof input.lineHeight === "number" && Number.isFinite(input.lineHeight)) {
+    const { min, max } = SETTINGS_LIMITS.lineHeight;
+    updates.lineHeight = clamp(input.lineHeight, min, max);
+  }
+
+  const { min: marginMin, max: marginMax } = SETTINGS_LIMITS.marginMm;
+  for (const key of ["marginTopMm", "marginBottomMm", "marginSideMm"] as const) {
+    const value = input[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      updates[key] = clamp(value, marginMin, marginMax);
+    }
+  }
+
+  // Ensure the row exists before updating: books created before the settings
+  // table was introduced have no row of their own.
+  getBookSettings(bookId);
+
   getDb()
     .update(bookSettings)
-    .set({ ...input, updatedAt: now })
+    .set(updates)
     .where(eq(bookSettings.bookId, bookId))
     .run();
 }
@@ -151,7 +218,11 @@ export function deleteChapter(bookId: string, chapterId: string) {
   const db = getDb();
 
   db.transaction((tx) => {
-    tx.delete(chapters).where(eq(chapters.id, chapterId)).run();
+    // Scope the delete to the book as well: a chapter id alone would let a
+    // stale or crafted request remove a chapter from a different book.
+    tx.delete(chapters)
+      .where(and(eq(chapters.id, chapterId), eq(chapters.bookId, bookId)))
+      .run();
     tx.update(books).set({ updatedAt: now }).where(eq(books.id, bookId)).run();
   });
 }
@@ -177,8 +248,7 @@ export function generateTocMarkdown(
   itemsPerPage = 16
 ): string {
   const chapterList = listChapters(bookId);
-  const regularChapters = chapterList.filter((ch) => ch.type !== "toc");
-  const existingTocs = chapterList.filter((ch) => ch.type === "toc");
+  const { tocChapters: existingTocs, regularChapters } = splitChapters(chapterList);
 
   if (regularChapters.length === 0) {
     return "# Spis treści\n\n*Brak rozdziałów do wyświetlenia.*";
@@ -198,18 +268,30 @@ export function generateTocMarkdown(
   const pageItems = regularChapters.slice(startIndex, startIndex + itemsPerPage);
 
   if (pageItems.length === 0 && pageNumber > 1) {
-    return `### Spis treści (cd.)\n\n*(Kolejne rozdziały lub brak kolejnych pozycji na tej stronie)*\n`;
+    return `### Spis treści (cd.)\n\n*(Brak kolejnych pozycji na tej stronie)*\n`;
+  }
+
+  const book = getBook(bookId);
+  const format = book?.format ?? "a5";
+
+  // Running page estimate, so the generated list carries the page each chapter
+  // starts on instead of a bare chapter number.
+  const frontMatterPages = FRONT_MATTER_PAGES + Math.max(existingTocs.length, 1);
+  const startPages: number[] = [];
+  let cursor = frontMatterPages + 1;
+  for (const chapter of regularChapters) {
+    startPages.push(cursor);
+    cursor += countPages(chapter.content, format);
   }
 
   const titleHeader =
-    pageNumber === 1
-      ? "# Spis treści\n\n"
-      : `### Spis treści (cd.)\n\n`;
+    pageNumber === 1 ? "# Spis treści\n\n" : `### Spis treści (cd.)\n\n`;
 
   let md = titleHeader;
   pageItems.forEach((ch, idx) => {
     const globalIdx = startIndex + idx;
-    md += `${globalIdx + 1}. **${ch.title || "Rozdział " + (globalIdx + 1)}**\n`;
+    const title = ch.title || `Rozdział ${globalIdx + 1}`;
+    md += `${globalIdx + 1}. **${title}** — s. ${startPages[globalIdx]}\n`;
   });
 
   return md;
@@ -219,7 +301,7 @@ export function createTocChapter(bookId: string) {
   const db = getDb();
   const now = Date.now();
   const existingChapters = listChapters(bookId);
-  const existingTocs = existingChapters.filter((chapter) => chapter.type === "toc");
+  const existingTocs = existingChapters.filter(isTocChapter);
 
   const pageNumber = existingTocs.length + 1;
   const title = "Spis treści";
@@ -265,12 +347,19 @@ export function createTocChapter(bookId: string) {
 
 export function createChapter(bookId: string) {
   const db = getDb();
-  const lastChapter = db
-    .select({ sortOrder: chapters.sortOrder })
-    .from(chapters)
-    .where(eq(chapters.bookId, bookId))
-    .orderBy(desc(chapters.sortOrder))
-    .get();
+  const existingChapters = listChapters(bookId);
+  const lastSortOrder = existingChapters.reduce(
+    (max, chapter) => Math.max(max, chapter.sortOrder),
+    -1
+  );
+
+  // Name the chapter after how many real chapters exist, not after its
+  // sortOrder. Inserting table-of-contents pages shifts sortOrder, which used
+  // to produce gaps like a fourth chapter called "Chapter 7".
+  const chapterCount = existingChapters.filter(
+    (chapter) => !isTocChapter(chapter)
+  ).length;
+
   const now = Date.now();
   const chapterId = randomUUID();
 
@@ -279,9 +368,9 @@ export function createChapter(bookId: string) {
       .values({
         id: chapterId,
         bookId,
-        title: `Chapter ${(lastChapter?.sortOrder ?? -1) + 2}`,
+        title: `Chapter ${chapterCount + 1}`,
         content: "",
-        sortOrder: (lastChapter?.sortOrder ?? -1) + 1,
+        sortOrder: lastSortOrder + 1,
         createdAt: now,
         updatedAt: now,
       })
@@ -316,8 +405,8 @@ export function updateChapter({
 }
 
 async function copyUploadsDir(sourceBookId: string, targetBookId: string) {
-  const sourceDir = join(process.cwd(), "data", "uploads", sourceBookId);
-  const targetDir = join(process.cwd(), "data", "uploads", targetBookId);
+  const sourceDir = getBookUploadsDir(sourceBookId);
+  const targetDir = getBookUploadsDir(targetBookId);
   try {
     const stats = await stat(sourceDir);
     if (stats.isDirectory()) {
@@ -455,11 +544,11 @@ export async function exportBookToZip(bookId: string): Promise<{ filename: strin
   const chaptersFolder = zip.folder("chapters");
   chapterList.forEach((ch, idx) => {
     const padded = String(idx + 1).padStart(2, "0");
-    const safeTitle = ch.title.toLowerCase().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
-    chaptersFolder?.file(`${padded}_${safeTitle || "chapter"}.md`, ch.content);
+    const safeTitle = toFilenameStem(ch.title, "chapter");
+    chaptersFolder?.file(`${padded}_${safeTitle}.md`, ch.content);
   });
 
-  const uploadsDir = join(process.cwd(), "data", "uploads", bookId);
+  const uploadsDir = getBookUploadsDir(bookId);
   try {
     const stats = await stat(uploadsDir);
     if (stats.isDirectory()) {
@@ -484,11 +573,17 @@ export async function exportBookToZip(bookId: string): Promise<{ filename: strin
     compressionOptions: { level: 6 },
   })) as Buffer;
 
-  const safeBookTitle = book.title.toLowerCase().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
-  const filename = `${safeBookTitle || "book"}-export.zip`;
+  const filename = `${toFilenameStem(book.title)}-export.zip`;
 
   return { filename, buffer: zipBuffer };
 }
+
+type ImportedChapter = {
+  title?: string;
+  content?: string;
+  type?: string;
+  sortOrder?: number;
+};
 
 export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(zipBuffer);
@@ -508,7 +603,7 @@ export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
   const now = Date.now();
   const db = getDb();
 
-  const targetUploadsDir = join(process.cwd(), "data", "uploads", newBookId);
+  const targetUploadsDir = getBookUploadsDir(newBookId);
   const entries = Object.keys(zip.files).filter(
     (path) => path.startsWith("uploads/") && !zip.files[path].dir
   );
@@ -517,10 +612,14 @@ export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
     await mkdir(targetUploadsDir, { recursive: true });
     for (const entryPath of entries) {
       const filename = entryPath.replace(/^uploads\//, "");
-      if (filename && !filename.includes("/")) {
-        const fileData = await zip.files[entryPath].async("nodebuffer");
-        await writeFile(join(targetUploadsDir, filename), fileData);
+      // Only accept plain filenames from the archive. Anything carrying a path
+      // separator or a `..` segment is dropped rather than written outside the
+      // book's own upload directory.
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename) || filename.includes("..")) {
+        continue;
       }
+      const fileData = await zip.files[entryPath].async("nodebuffer");
+      await writeFile(join(targetUploadsDir, filename), fileData);
     }
   }
 
@@ -554,33 +653,47 @@ export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
       })
       .run();
 
+    const importNumber = (
+      value: unknown,
+      fallback: number,
+      { min, max }: { min: number; max: number }
+    ) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? clamp(value, min, max)
+        : fallback;
+
     tx.insert(bookSettings)
       .values({
         bookId: newBookId,
-        fontFamily: settingsData.fontFamily ?? "serif",
-        fontSizePt:
-          typeof settingsData.fontSizePt === "number"
-            ? settingsData.fontSizePt
-            : 11,
-        lineHeight:
-          typeof settingsData.lineHeight === "number"
-            ? settingsData.lineHeight
-            : 160,
-        marginTopMm:
-          typeof settingsData.marginTopMm === "number"
-            ? settingsData.marginTopMm
-            : 20,
-        marginBottomMm:
-          typeof settingsData.marginBottomMm === "number"
-            ? settingsData.marginBottomMm
-            : 20,
-        marginSideMm:
-          typeof settingsData.marginSideMm === "number"
-            ? settingsData.marginSideMm
-            : 18,
-        chapterStart: ["any", "recto", "verso"].includes(
-          settingsData.chapterStart
-        )
+        fontFamily: BOOK_FONT_FAMILIES.includes(settingsData.fontFamily)
+          ? settingsData.fontFamily
+          : "serif",
+        fontSizePt: importNumber(
+          settingsData.fontSizePt,
+          11,
+          SETTINGS_LIMITS.fontSizePt
+        ),
+        lineHeight: importNumber(
+          settingsData.lineHeight,
+          160,
+          SETTINGS_LIMITS.lineHeight
+        ),
+        marginTopMm: importNumber(
+          settingsData.marginTopMm,
+          20,
+          SETTINGS_LIMITS.marginMm
+        ),
+        marginBottomMm: importNumber(
+          settingsData.marginBottomMm,
+          20,
+          SETTINGS_LIMITS.marginMm
+        ),
+        marginSideMm: importNumber(
+          settingsData.marginSideMm,
+          18,
+          SETTINGS_LIMITS.marginMm
+        ),
+        chapterStart: CHAPTER_STARTS.includes(settingsData.chapterStart)
           ? settingsData.chapterStart
           : "any",
         updatedAt: now,
@@ -600,7 +713,7 @@ export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
         })
         .run();
     } else {
-      chaptersData.forEach((ch: any, idx: number) => {
+      chaptersData.forEach((ch: ImportedChapter, idx: number) => {
         const content = replaceUploadUrls(ch.content ?? "");
         tx.insert(chapters)
           .values({
@@ -608,7 +721,7 @@ export async function importBookFromZip(zipBuffer: Buffer): Promise<string> {
             bookId: newBookId,
             title: ch.title || `Chapter ${idx + 1}`,
             content,
-            type: ch.type || "chapter",
+            type: ch.type === "toc" ? "toc" : "chapter",
             sortOrder: typeof ch.sortOrder === "number" ? ch.sortOrder : idx,
             createdAt: now,
             updatedAt: now,
